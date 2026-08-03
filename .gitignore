@@ -32,9 +32,18 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+# ...but the template carries no values, only the variable names and where to
+# get them. Committing it is what makes a fresh checkout set-up-able.
+!.env.example
 
 # vercel
 .vercel
+
+# Studio workspace: original artwork, rendered assets, the Google Drive refresh
+# token and cached Shopify media ids. Machine state, never source. The Drive
+# token is a long-lived credential to a personal Google account — this entry is
+# the only thing keeping it out of history, so it must never be relaxed.
+/workspace/
 
 # typescript
 *.tsbuildinfo
