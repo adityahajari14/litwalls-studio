@@ -2,6 +2,8 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { DropZone } from "@/app/batches/[batchId]/drop-zone";
+import { JobRow } from "@/components/job-row";
+import { RunButton } from "@/components/run-button";
 import { listJobs, readBatch } from "@/lib/pipeline/store";
 import { resolvePriceTable } from "@/lib/print/pricing";
 import { readSettings } from "@/lib/pipeline/settings";
@@ -58,9 +60,12 @@ export default async function BatchPage(
       </section>
 
       <section className="mt-10">
-        <h2 className="text-xs font-medium uppercase tracking-widest text-zinc-500">
-          Posters ({jobs.length})
-        </h2>
+        <div className="flex items-baseline justify-between">
+          <h2 className="text-xs font-medium uppercase tracking-widest text-zinc-500">
+            Posters ({jobs.length})
+          </h2>
+          {jobs.length > 0 ? <RunButton batchId={batch.id} /> : null}
+        </div>
 
         {jobs.length === 0 ? (
           <p className="mt-3 text-sm text-zinc-500">
@@ -69,15 +74,7 @@ export default async function BatchPage(
         ) : (
           <ul className="mt-3 divide-y divide-zinc-200/70 dark:divide-zinc-800">
             {jobs.map((job) => (
-              <li
-                key={job.id}
-                className="flex items-center justify-between py-2.5 text-sm"
-              >
-                <span className="truncate">{job.sourceName}</span>
-                <span className="ml-4 shrink-0 text-xs text-zinc-500">
-                  {job.stage}
-                </span>
-              </li>
+              <JobRow key={job.id} job={job} />
             ))}
           </ul>
         )}

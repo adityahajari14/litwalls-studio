@@ -93,7 +93,27 @@ export type ProbeResult = {
   upscaled: boolean;
   /** Effective DPI at each size, given the master's real pixels. */
   dpiBySize: Record<SizeId, number>;
+  /**
+   * Fraction of the source that survives the widest crop, 0..1.
+   *
+   * Exists because a split poster is very wide (three sheets side by side, so
+   * roughly 2.12:1 for A-series) and a portrait source simply cannot fill that
+   * shape — the crop is forced into a narrow horizontal band and most of the
+   * artwork is discarded. The geometry is correct, but silently throwing away
+   * two thirds of a poster is not something a human should discover after
+   * publishing. Below COVERAGE_WARN the review UI says so plainly.
+   */
+  coverage: number;
 };
+
+/**
+ * Warn when a crop keeps less than this much of the source.
+ *
+ * 0.5 is a judgement call: losing a little to aspect-fitting is normal and
+ * expected, but keeping under half the artwork usually means the source is the
+ * wrong shape for the format rather than merely needing a trim.
+ */
+export const COVERAGE_WARN = 0.5;
 
 /**
  * The parts of a product title we generate.
