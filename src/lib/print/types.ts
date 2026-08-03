@@ -209,8 +209,12 @@ export type PosterJob = {
   focal: FocalPoint | null;
   /** A size present here wins over the focal-derived crop, permanently. */
   cropOverrides: Partial<Record<SizeId, NormRect>>;
-  /** Decimal strings ("799.00") matching Shopify's money format. */
+  /**
+   * Top of the price override chain: job → batch → settings → fallback.
+   * Only the sizes actually changed appear here; the rest fall through.
+   */
   priceOverrides: Partial<Record<SizeId, string>>;
+  compareAtOverrides: Partial<Record<SizeId, string>>;
   assets: RenderedAsset[];
   mockups: RenderedMockup[];
   selectedTemplateIds: string[];
@@ -230,6 +234,13 @@ export type Batch = {
   kind: PosterKind;
   /** Library images attached to every job in the batch by default. */
   defaultLibraryIds: string[];
+  /**
+   * Batch-level prices, set at upload time. Override the dashboard defaults
+   * and are in turn overridden per poster. Sizes left blank fall through, so
+   * "this batch is premium A3 only" is a one-field edit.
+   */
+  prices: Partial<Record<SizeId, string>>;
+  compareAt: Partial<Record<SizeId, string>>;
   jobIds: string[];
   createdAt: number;
   updatedAt: number;

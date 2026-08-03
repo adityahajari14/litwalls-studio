@@ -36,6 +36,55 @@ export const CATEGORY_LABEL: Record<CategoryId, string> = {
 
 export const CATEGORY_IDS = Object.keys(CATEGORY_SUFFIX) as CategoryId[];
 
+/**
+ * The tag that puts a product in its collection.
+ *
+ * All four collections in the live store are SMART collections keyed on tags,
+ * verified against the Admin API:
+ *
+ *   Marvel        TAG = "Marvel"
+ *   DC            TAG = "DC"
+ *   Music         TAG = "Music"
+ *   Movies & TV   TAG = "Movies" OR "Series" OR "Netflix"
+ *
+ * That has a concrete consequence for publishing: membership is a side effect
+ * of tagging, so there is NO collectionAddProducts call to make. Get the tag
+ * right and the product appears; get it wrong and the product is live but
+ * invisible in every collection, which is the failure mode to watch for.
+ *
+ * "Movies" is chosen for movies-tv because it is the tag the existing
+ * catalogue actually uses — "Series" and "Netflix" also match the rule, but
+ * picking the majority spelling keeps the tag cloud from fragmenting further.
+ *
+ * These tags are REQUIRED. `ensureCategoryTag` below adds one if the model or
+ * a human left it out, rather than trusting either to remember.
+ */
+export const CATEGORY_TAG: Record<CategoryId, string> = {
+  marvel: "Marvel",
+  dc: "DC",
+  "movies-tv": "Movies",
+  music: "Music",
+};
+
+/**
+ * Guarantee the collection tag is present, without disturbing the rest.
+ *
+ * Compared case-insensitively because the live tag cloud already contains
+ * near-duplicates ("Weeknd"/"weekend"/"Weekend"); adding a second "marvel"
+ * beside an existing "Marvel" would make that worse while doing nothing
+ * useful. An existing tag that differs only by case is left exactly as it is.
+ */
+export function ensureCategoryTag(
+  tags: readonly string[],
+  category: CategoryId,
+): string[] {
+  const required = CATEGORY_TAG[category];
+  const present = tags.some(
+    (tag) => tag.trim().toLowerCase() === required.toLowerCase(),
+  );
+  return present ? [...tags] : [required, ...tags];
+}
+
 export type TitleParts = {
   subject: string;
   sequence: number;

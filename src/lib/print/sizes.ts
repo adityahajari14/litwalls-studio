@@ -63,25 +63,13 @@ export const DPI_FLOOR = 250;
 export const DPI_HARD_FLOOR = 150;
 
 /**
- * Prices per size, as Shopify money strings.
+ * Prices live in `print/pricing.ts`, not here.
  *
- * PLACEHOLDER — every existing product sells at ₹149 for a single 13×19, so
- * these are almost certainly wrong. Confirm before the first real publish.
+ * They resolve through three levels of override (poster → batch → dashboard
+ * settings) and are user-editable at every one, so they are state rather than
+ * a constant. Keeping them out of this file also keeps the mirrored size table
+ * free of anything the drift check has no business comparing.
  */
-export const PRICES: Record<SizeId, string> = {
-  A5: "299.00",
-  A4: "499.00",
-  A3: "799.00",
-  "13x19": "999.00",
-};
-
-/** Struck-through "was" prices. Omit a size to show no comparison. */
-export const COMPARE_AT: Partial<Record<SizeId, string>> = {
-  A5: "499.00",
-  A4: "799.00",
-  A3: "1299.00",
-  "13x19": "1599.00",
-};
 
 /**
  * The target aspect ratio (short edge / long edge) for a size.
@@ -163,14 +151,6 @@ export function targetPanelPixels(
 export function cropAspectFor(sizeId: SizeId, kind: PosterKind): number {
   const aspect = aspectFor(sizeId);
   return kind === "split3" ? aspect * 3 : aspect;
-}
-
-/** Resolve the price for a size, honouring a per-product override. */
-export function priceFor(
-  overrides: Partial<Record<SizeId, string>>,
-  sizeId: SizeId,
-): string {
-  return overrides[sizeId] ?? PRICES[sizeId];
 }
 
 /** Whether a rendered asset is below the soft floor. */

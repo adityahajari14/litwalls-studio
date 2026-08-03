@@ -8,7 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "check:drift": "node scripts/check-drift.mjs",
-    "test": "node --test \"tests/**/*.test.ts\""
+    "test": "node --conditions react-server --import ./tests/alias-hook.mjs --test \"tests/**/*.test.ts\""
   },
   "dependencies": {
     "next": "16.2.12",

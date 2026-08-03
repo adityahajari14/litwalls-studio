@@ -1,18 +1,33 @@
+import Link from "next/link";
+
 import { CATEGORY_LABEL, CATEGORY_IDS } from "@/lib/print/title";
-import { PRICES, SIZES } from "@/lib/print/sizes";
+import { SIZES } from "@/lib/print/sizes";
+import { resolvePriceTable } from "@/lib/print/pricing";
+import { readSettings } from "@/lib/pipeline/settings";
 
 /**
  * Placeholder home page.
  *
  * Phase 1 replaces this with the batch list. For now it renders the loaded
  * configuration, which is a genuinely useful smoke test: if the size table or
- * category list is malformed, this page shows it immediately rather than the
- * first upload failing three stages deep.
+ * saved price defaults are malformed, this page shows it immediately rather
+ * than the first upload failing three stages deep.
  */
-export default function Home() {
+export default async function Home() {
+  const settings = await readSettings();
+  const prices = resolvePriceTable({ settings: settings.prices });
+
   return (
     <main className="mx-auto w-full max-w-3xl px-6 py-16">
-      <h1 className="text-2xl font-semibold tracking-tight">Litwalls Studio</h1>
+      <div className="flex items-baseline justify-between">
+        <h1 className="text-2xl font-semibold tracking-tight">Litwalls Studio</h1>
+        <Link
+          href="/settings"
+          className="text-sm text-zinc-500 underline-offset-4 hover:underline"
+        >
+          Settings
+        </Link>
+      </div>
       <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
         Poster processing and publishing. Local only — this never ships.
       </p>
@@ -38,13 +53,15 @@ export default function Home() {
                 <td className="py-1.5 tabular-nums text-zinc-600 dark:text-zinc-400">
                   {size.minWidth} × {size.minHeight}
                 </td>
-                <td className="py-1.5 text-right tabular-nums">₹{PRICES[size.id]}</td>
+                <td className="py-1.5 text-right tabular-nums">₹{prices[size.id]}</td>
               </tr>
             ))}
           </tbody>
         </table>
         <p className="mt-2 text-xs text-zinc-500">
-          Prices are placeholders — confirm before the first publish.
+          {settings.updatedAt === 0
+            ? "Placeholder defaults — set real prices in Settings before publishing."
+            : "Default prices. A batch or an individual poster can override these."}
         </p>
       </section>
 

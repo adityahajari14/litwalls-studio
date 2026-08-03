@@ -8,7 +8,6 @@ import {
   dpiFor,
   isLowRes,
   isUnprintable,
-  priceFor,
   printSize,
   SIZE_IDS,
   targetPanelPixels,
@@ -96,10 +95,6 @@ test("split crop aspect is three panels wide", () => {
   assert.equal(cropAspectFor("A3", "normal"), aspectFor("A3"));
 });
 
-test("priceFor honours an override and falls back to the table", () => {
-  assert.equal(priceFor({ A4: "555.00" }, "A4"), "555.00");
-  assert.equal(priceFor({}, "A4"), "499.00");
-});
 
 test("panels tile the crop exactly, with no gap or overlap", () => {
   const crop = { x: 0.1, y: 0.2, width: 0.6, height: 0.5 };
