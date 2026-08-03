@@ -1,21 +1,14 @@
 import Link from "next/link";
 
-import { CATEGORY_LABEL, CATEGORY_IDS } from "@/lib/print/title";
-import { SIZES } from "@/lib/print/sizes";
-import { resolvePriceTable } from "@/lib/print/pricing";
+import { listBatches } from "@/lib/pipeline/store";
 import { readSettings } from "@/lib/pipeline/settings";
+import { CATEGORY_LABEL } from "@/lib/print/title";
 
-/**
- * Placeholder home page.
- *
- * Phase 1 replaces this with the batch list. For now it renders the loaded
- * configuration, which is a genuinely useful smoke test: if the size table or
- * saved price defaults are malformed, this page shows it immediately rather
- * than the first upload failing three stages deep.
- */
 export default async function Home() {
-  const settings = await readSettings();
-  const prices = resolvePriceTable({ settings: settings.prices });
+  const [batches, settings] = await Promise.all([
+    listBatches(),
+    readSettings(),
+  ]);
 
   return (
     <main className="mx-auto w-full max-w-3xl px-6 py-16">
@@ -32,58 +25,58 @@ export default async function Home() {
         Poster processing and publishing. Local only — this never ships.
       </p>
 
-      <section className="mt-10">
-        <h2 className="text-xs font-medium uppercase tracking-widest text-zinc-500">
-          Print sizes
-        </h2>
-        <table className="mt-3 w-full text-sm">
-          <thead className="text-left text-zinc-500">
-            <tr>
-              <th className="py-1 font-normal">Size</th>
-              <th className="py-1 font-normal">Dimensions</th>
-              <th className="py-1 font-normal">Min pixels</th>
-              <th className="py-1 text-right font-normal">Price</th>
-            </tr>
-          </thead>
-          <tbody>
-            {SIZES.map((size) => (
-              <tr key={size.id} className="border-t border-zinc-200/70 dark:border-zinc-800">
-                <td className="py-1.5 font-medium">{size.label}</td>
-                <td className="py-1.5 text-zinc-600 dark:text-zinc-400">{size.mm}</td>
-                <td className="py-1.5 tabular-nums text-zinc-600 dark:text-zinc-400">
-                  {size.minWidth} × {size.minHeight}
-                </td>
-                <td className="py-1.5 text-right tabular-nums">₹{prices[size.id]}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        <p className="mt-2 text-xs text-zinc-500">
-          {settings.updatedAt === 0
-            ? "Placeholder defaults — set real prices in Settings before publishing."
-            : "Default prices. A batch or an individual poster can override these."}
+      {settings.updatedAt === 0 ? (
+        <p className="mt-6 rounded border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-300">
+          Prices are still the built-in placeholders.{" "}
+          <Link href="/settings" className="underline underline-offset-4">
+            Set your real defaults
+          </Link>{" "}
+          before publishing anything.
         </p>
-      </section>
+      ) : null}
 
       <section className="mt-10">
-        <h2 className="text-xs font-medium uppercase tracking-widest text-zinc-500">
-          Categories
-        </h2>
-        <ul className="mt-3 flex flex-wrap gap-2 text-sm">
-          {CATEGORY_IDS.map((id) => (
-            <li
-              key={id}
-              className="rounded-full border border-zinc-200 px-3 py-1 dark:border-zinc-800"
-            >
-              {CATEGORY_LABEL[id]}
-            </li>
-          ))}
-        </ul>
-      </section>
+        <div className="flex items-baseline justify-between">
+          <h2 className="text-xs font-medium uppercase tracking-widest text-zinc-500">
+            Batches
+          </h2>
+          <Link
+            href="/batches/new"
+            className="rounded bg-zinc-900 px-3 py-1.5 text-sm font-medium text-white dark:bg-zinc-100 dark:text-zinc-900"
+          >
+            New batch
+          </Link>
+        </div>
 
-      <p className="mt-12 text-sm text-zinc-500">
-        Next: batch creation and upload (Phase 1).
-      </p>
+        {batches.length === 0 ? (
+          <p className="mt-4 text-sm text-zinc-500">
+            No batches yet. Create one to start uploading posters.
+          </p>
+        ) : (
+          <ul className="mt-4 divide-y divide-zinc-200/70 dark:divide-zinc-800">
+            {batches.map((batch) => (
+              <li key={batch.id}>
+                <Link
+                  href={`/batches/${batch.id}`}
+                  className="flex items-center justify-between py-3 text-sm hover:opacity-70"
+                >
+                  <span>
+                    <span className="font-medium">{batch.name}</span>
+                    <span className="ml-2 text-xs text-zinc-500">
+                      {CATEGORY_LABEL[batch.category]}
+                      {batch.kind === "split3" ? " · split" : ""}
+                    </span>
+                  </span>
+                  <span className="text-xs text-zinc-500">
+                    {batch.jobIds.length} poster
+                    {batch.jobIds.length === 1 ? "" : "s"}
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
     </main>
   );
 }
