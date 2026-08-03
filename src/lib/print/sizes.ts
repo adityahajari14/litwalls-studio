@@ -127,26 +127,32 @@ export function targetPixels(
 /**
  * The pixels one PANEL of a split poster needs.
  *
- * A split product is one image across three sheets, so each panel is a third
- * of the width at full height. That means a split A3 needs three times the
- * horizontal resolution of a normal A3 to hit the same density — which is why
- * split jobs flag `lowRes` far sooner, and why that is correct rather than a
- * bug to tune away.
+ * A panel is a FULL SHEET, not a fraction of one. Buying "split A3" means
+ * receiving three A3 sheets that hang side by side — so each panel is rendered
+ * at the same dimensions as a normal A3, and the set as a whole is three
+ * sheets wide.
+ *
+ * Panels are portrait by convention regardless of the source's orientation:
+ * three tall sheets in a row is what a triptych looks like on a wall, and it
+ * is the only arrangement where a landscape artwork reads correctly across
+ * them.
  */
-export function targetPanelPixels(
-  sizeId: SizeId,
-  orientation: "portrait" | "landscape",
-): { width: number; height: number } {
-  const full = targetPixels(sizeId, orientation);
-  return { width: Math.round(full.width / 3), height: full.height };
+export function targetPanelPixels(sizeId: SizeId): {
+  width: number;
+  height: number;
+} {
+  return targetPixels(sizeId, "portrait");
 }
 
 /**
  * The aspect ratio the source must be cropped to before slicing.
  *
- * For a normal poster this is just the size's aspect. For a split poster the
- * three panels are laid side by side, so the artwork as a whole is three
- * panels wide — the crop is three times as wide as a single sheet.
+ * For a normal poster this is the size's own aspect. For a split poster the
+ * three sheets sit side by side, so the artwork spans three portrait sheets:
+ * three times as wide, one sheet tall. For A-series that is 3 x 0.707 = 2.121.
+ *
+ * This is deliberately independent of the source's orientation — the panels
+ * are always portrait, so the crop always has to be this shape.
  */
 export function cropAspectFor(sizeId: SizeId, kind: PosterKind): number {
   const aspect = aspectFor(sizeId);

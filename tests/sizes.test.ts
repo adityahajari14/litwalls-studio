@@ -83,16 +83,40 @@ test("targetPixels follows the artwork orientation", () => {
   assert.equal(portrait.width, landscape.height);
 });
 
-test("a split panel is one third the width at full height", () => {
-  const full = targetPixels("A3", "portrait");
-  const panel = targetPanelPixels("A3", "portrait");
-  assert.equal(panel.height, full.height);
-  assert.equal(panel.width, Math.round(full.width / 3));
+test("a split panel is a FULL sheet, not a fraction of one", () => {
+  // Buying "split A3" means receiving three A3 sheets. An earlier version
+  // divided the sheet width by three, which would have printed three narrow
+  // strips — the artwork would have been right and the paper wrong.
+  const sheet = targetPixels("A3", "portrait");
+  const panel = targetPanelPixels("A3");
+  assert.deepEqual(panel, sheet);
 });
 
-test("split crop aspect is three panels wide", () => {
+test("panels are portrait regardless of the source's orientation", () => {
+  const panel = targetPanelPixels("A3");
+  assert.ok(panel.height > panel.width, "a triptych panel should be portrait");
+});
+
+test("three assembled panels match the split crop aspect", () => {
+  // The property that keeps mockups honest: what gets cropped from the source
+  // must be the same shape as what ends up on the wall. These disagreeing is
+  // exactly how a circle turned into an ellipse in the first split mockup.
+  for (const sizeId of SIZE_IDS) {
+    const panel = targetPanelPixels(sizeId);
+    const assembled = (panel.width * 3) / panel.height;
+    const wanted = cropAspectFor(sizeId, "split3");
+    assert.ok(
+      Math.abs(assembled - wanted) < 0.01,
+      `${sizeId}: assembled ${assembled.toFixed(3)} vs crop ${wanted.toFixed(3)}`,
+    );
+  }
+});
+
+test("split crop aspect is three portrait sheets wide", () => {
   assert.equal(cropAspectFor("A3", "split3"), aspectFor("A3") * 3);
   assert.equal(cropAspectFor("A3", "normal"), aspectFor("A3"));
+  // A-series: 3 x 0.707 = 2.121, a wide band.
+  assert.ok(Math.abs(cropAspectFor("A3", "split3") - 2.121) < 0.01);
 });
 
 

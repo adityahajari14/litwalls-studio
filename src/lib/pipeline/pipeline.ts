@@ -2,6 +2,7 @@ import "server-only";
 
 import { updateJob } from "@/lib/pipeline/store";
 import { cropAll } from "@/lib/pipeline/stages/crop";
+import { renderMockups } from "@/lib/pipeline/stages/mockup";
 import { probe } from "@/lib/pipeline/stages/probe";
 import { upscale } from "@/lib/pipeline/stages/upscale";
 import { hasReached, STAGE_ORDER } from "@/lib/print/types";
@@ -49,10 +50,7 @@ const STAGES: Partial<Record<JobStage, StageFn>> = {
 
   cropped: async (job) => ({ assets: await cropAll(job) }),
 
-  mocked: async () => {
-    // Phase 3 renders mockups here.
-    return {};
-  },
+  mocked: async (job) => ({ mockups: await renderMockups(job) }),
 };
 
 /**

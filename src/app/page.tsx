@@ -14,12 +14,14 @@ export default async function Home() {
     <main className="mx-auto w-full max-w-3xl px-6 py-16">
       <div className="flex items-baseline justify-between">
         <h1 className="text-2xl font-semibold tracking-tight">Litwalls Studio</h1>
-        <Link
-          href="/settings"
-          className="text-sm text-zinc-500 underline-offset-4 hover:underline"
-        >
-          Settings
-        </Link>
+        <div className="flex gap-4 text-sm text-zinc-500">
+          <Link href="/templates" className="underline-offset-4 hover:underline">
+            Templates
+          </Link>
+          <Link href="/settings" className="underline-offset-4 hover:underline">
+            Settings
+          </Link>
+        </div>
       </div>
       <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
         Poster processing and publishing. Local only — this never ships.

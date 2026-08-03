@@ -1,0 +1,15 @@
+{
+  "id": "hallway-angled",
+  "name": "Hallway — angled wall",
+  "kind": "perspective",
+  "background": "background.jpg",
+  "canvas": { "width": 2400, "height": 1600 },
+  "corners": [
+    { "x": 1640, "y": 430 },
+    { "x": 2180, "y": 560 },
+    { "x": 2180, "y": 1180 },
+    { "x": 1640, "y": 1210 }
+  ],
+  "shadow": 0.25,
+  "suitsAspect": [0.707]
+}

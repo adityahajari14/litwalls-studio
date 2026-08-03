@@ -90,13 +90,14 @@ export function dpiBySize(
   kind: PosterJob["kind"],
 ): Record<SizeId, number> {
   const out = {} as Record<SizeId, number>;
-  const orientation = px.width >= px.height ? "landscape" : "portrait";
 
   for (const sizeId of SIZE_IDS) {
     if (kind === "split3") {
-      // The source is divided across three panels, so each panel receives a
-      // third of the width.
-      const panel = targetPanelPixels(sizeId, orientation);
+      // Each panel is a FULL sheet fed by only a third of the source's width,
+      // so a split set needs roughly three times the horizontal resolution of
+      // a single poster at the same size. That is why split jobs flag low-res
+      // far sooner — correct, not a threshold to tune away.
+      const panel = targetPanelPixels(sizeId);
       const perPanel = { width: px.width / 3, height: px.height };
       out[sizeId] = dpiForTarget(perPanel, panel);
     } else {

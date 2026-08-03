@@ -112,7 +112,8 @@ export async function cropAll(job: PosterJob): Promise<RenderedAsset[]> {
     const region = cropForSize(job, sizeId, source);
 
     if (job.kind === "split3") {
-      const target = targetPanelPixels(sizeId, orientation);
+      // Panels are always portrait sheets, whatever the source's orientation.
+      const target = targetPanelPixels(sizeId);
       // All three panels derive from ONE parent rect, so their seams cannot
       // drift. See print/split.ts.
       const panels = panelRects(region);
