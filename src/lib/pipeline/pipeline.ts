@@ -1,6 +1,7 @@
 import "server-only";
 
 import { updateJob } from "@/lib/pipeline/store";
+import { analyze } from "@/lib/pipeline/stages/analyze";
 import { cropAll } from "@/lib/pipeline/stages/crop";
 import { renderMockups } from "@/lib/pipeline/stages/mockup";
 import { probe } from "@/lib/pipeline/stages/probe";
@@ -34,19 +35,7 @@ const STAGES: Partial<Record<JobStage, StageFn>> = {
 
   upscaled: async (job) => ({ probe: await upscale(job) }),
 
-  analyzed: async (job) => {
-    // Phase 4 replaces this with Gemini. Until then the neutral fallback: the
-    // whole frame is the subject, which makes cropRectFor a centre crop.
-    if (job.focal) return {};
-    return {
-      focal: {
-        subject: { x: 0, y: 0, width: 1, height: 1 },
-        anchor: { x: 0.5, y: 0.5 },
-        confidence: 0,
-        source: "fallback" as const,
-      },
-    };
-  },
+  analyzed: async (job) => analyze(job),
 
   cropped: async (job) => ({ assets: await cropAll(job) }),
 
