@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 import { COVERAGE_WARN, type PosterJob } from "@/lib/print/types";
 
 /** Small coloured pill for a warning or state. */
@@ -38,10 +40,21 @@ function Badge({
 export function JobRow({ job }: { job: PosterJob }) {
   const lowResSizes = [...new Set(job.assets.filter((a) => a.lowRes).map((a) => a.sizeId))];
   const coverage = job.probe?.coverage ?? 1;
+  // Only reviewable once there is something to review.
+  const reviewable = job.assets.length > 0;
 
   return (
     <li className="flex items-center justify-between gap-3 py-2.5 text-sm">
-      <span className="min-w-0 flex-1 truncate">{job.sourceName}</span>
+      {reviewable ? (
+        <Link
+          href={`/batches/${job.batchId}/jobs/${job.id}`}
+          className="min-w-0 flex-1 truncate underline-offset-4 hover:underline"
+        >
+          {job.sourceName}
+        </Link>
+      ) : (
+        <span className="min-w-0 flex-1 truncate">{job.sourceName}</span>
+      )}
 
       <span className="flex shrink-0 flex-wrap items-center gap-1.5">
         {job.probe?.upscaled ? (
@@ -69,8 +82,10 @@ export function JobRow({ job }: { job: PosterJob }) {
           <Badge tone="bad" title={job.status.message}>
             failed
           </Badge>
+        ) : job.stage === "approved" ? (
+          <Badge tone="good">approved</Badge>
         ) : job.status.kind === "needs-review" ? (
-          <Badge tone="good">ready</Badge>
+          <Badge tone="good">ready to review</Badge>
         ) : job.status.kind === "running" ? (
           <Badge>{job.status.stage}…</Badge>
         ) : (

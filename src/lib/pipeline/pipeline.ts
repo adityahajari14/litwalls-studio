@@ -1,6 +1,6 @@
 import "server-only";
 
-import { updateJob } from "@/lib/pipeline/store";
+import { readJob, updateJob } from "@/lib/pipeline/store";
 import { analyze } from "@/lib/pipeline/stages/analyze";
 import { cropAll } from "@/lib/pipeline/stages/crop";
 import { renderMockups } from "@/lib/pipeline/stages/mockup";
@@ -54,6 +54,14 @@ export async function advanceJob(
   options: { until?: JobStage } = {},
 ): Promise<PosterJob> {
   const until = options.until ?? AUTOMATIC_END;
+
+  // Bail out BEFORE touching status. A job that is already finished — waiting
+  // for review, or approved — has nothing to advance, and flipping it to
+  // "running" and back would leave it looking busy while doing nothing, or
+  // stranded as "running" if the process died in between.
+  const existing = await readJob(batchId, jobId);
+  if (!existing) throw new Error(`Job not found: ${batchId}/${jobId}`);
+  if (hasReached(existing.stage, until)) return existing;
 
   let current = await updateJob(batchId, jobId, (job) => ({
     ...job,

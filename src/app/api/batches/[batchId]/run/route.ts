@@ -1,5 +1,6 @@
 import { runJobs } from "@/lib/pipeline/pipeline";
 import { listJobs, readBatch } from "@/lib/pipeline/store";
+import { hasReached } from "@/lib/print/types";
 
 /**
  * Process every job in a batch that has not finished the automatic stages.
@@ -23,10 +24,16 @@ export async function POST(
 
   const jobs = await listJobs(batchId);
 
-  // Anything already past the automatic stages, or parked for review, is left
-  // alone — re-running a batch must not redo finished work.
+  // Anything that has finished the automatic stages is left alone, whether it
+  // is waiting for review or already approved.
+  //
+  // `hasReached` rather than an equality check on "mocked": an approved job is
+  // PAST mocked, so `stage !== "mocked"` treated it as unfinished and re-ran
+  // the whole pipeline over it — silently discarding the human's crop edits
+  // and dropping it back out of the approved state.
   const pending = jobs.filter(
-    (job) => job.status.kind !== "needs-review" && job.stage !== "mocked",
+    (job) =>
+      job.status.kind !== "needs-review" && !hasReached(job.stage, "mocked"),
   );
 
   await runJobs(

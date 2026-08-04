@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { DropZone } from "@/app/batches/[batchId]/drop-zone";
-import { JobRow } from "@/components/job-row";
+import { JobList } from "@/components/job-list";
 import { RunButton } from "@/components/run-button";
 import { listJobs, readBatch } from "@/lib/pipeline/store";
 import { resolvePriceTable } from "@/lib/print/pricing";
@@ -67,17 +67,7 @@ export default async function BatchPage(
           {jobs.length > 0 ? <RunButton batchId={batch.id} /> : null}
         </div>
 
-        {jobs.length === 0 ? (
-          <p className="mt-3 text-sm text-zinc-500">
-            Nothing uploaded yet. Drop artwork above to get started.
-          </p>
-        ) : (
-          <ul className="mt-3 divide-y divide-zinc-200/70 dark:divide-zinc-800">
-            {jobs.map((job) => (
-              <JobRow key={job.id} job={job} />
-            ))}
-          </ul>
-        )}
+        <JobList batchId={batch.id} initialJobs={jobs} />
       </section>
     </main>
   );
