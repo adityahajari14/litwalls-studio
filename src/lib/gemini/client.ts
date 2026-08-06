@@ -62,12 +62,22 @@ export type AskOptions<T> = {
   signal?: AbortSignal;
 };
 
+/**
+ * The reply shape, verified against the live API.
+ *
+ * Text arrives at `steps[].content[].text`. The response also contains
+ * `steps` of type "thought", which carry a signature and no content — those
+ * must be skipped or the extracted text comes back empty.
+ *
+ * `output_text` and the older `candidates` shape are still checked first as a
+ * cheap hedge: this is the part most likely to move under us, and tolerating
+ * more than one shape costs nothing.
+ */
 type InteractionResponse = {
   output_text?: string;
-  // Older/alternate shapes, tolerated so a rollback on Google's side does not
-  // take the pipeline down with it.
-  candidates?: { content?: { parts?: { text?: string }[] } }[];
   text?: string;
+  steps?: { type?: string; content?: { type?: string; text?: string }[] }[];
+  candidates?: { content?: { parts?: { text?: string }[] } }[];
 };
 
 /**
@@ -90,13 +100,16 @@ export async function askGemini<T>(options: AskOptions<T>): Promise<Result<T>> {
     });
   }
 
+  // The JSON Schema spreads DIRECTLY into response_format — verified against
+  // the live API, which rejects `{type: "json_schema", json_schema: {...}}`
+  // and lists its supported types in the error. Nesting the schema under a
+  // `schema` key is accepted but silently returns an empty object, which is
+  // the worse failure of the two because it looks like the model had nothing
+  // to say.
   const body = JSON.stringify({
     model: model(),
     input,
-    response_format: {
-      type: "json_schema",
-      json_schema: { name: "reply", schema: options.schema },
-    },
+    response_format: options.schema,
   });
 
   for (let attempt = 0; attempt < 2; attempt++) {
@@ -168,13 +181,29 @@ export async function askGemini<T>(options: AskOptions<T>): Promise<Result<T>> {
  * Tolerating more than one shape is deliberate: this is the part most likely
  * to change under us, and falling back costs nothing.
  */
-function extractText(payload: InteractionResponse): string | null {
+export function extractText(payload: InteractionResponse): string | null {
   if (typeof payload.output_text === "string" && payload.output_text.trim()) {
     return payload.output_text;
   }
   if (typeof payload.text === "string" && payload.text.trim()) {
     return payload.text;
   }
+
+  // The shape the live API actually returns. Steps of type "thought" carry no
+  // content, so they are skipped rather than treated as an empty reply.
+  if (Array.isArray(payload.steps)) {
+    const parts: string[] = [];
+    for (const step of payload.steps) {
+      for (const chunk of step.content ?? []) {
+        if (chunk.type === "text" && typeof chunk.text === "string") {
+          parts.push(chunk.text);
+        }
+      }
+    }
+    const joined = parts.join("").trim();
+    if (joined) return joined;
+  }
+
   const candidate = payload.candidates?.[0]?.content?.parts?.[0]?.text;
   return typeof candidate === "string" && candidate.trim() ? candidate : null;
 }
