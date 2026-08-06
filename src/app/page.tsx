@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { DriveStatus } from "@/components/drive-status";
 import { listBatches } from "@/lib/pipeline/store";
 import { readSettings } from "@/lib/pipeline/settings";
 import { CATEGORY_LABEL } from "@/lib/print/title";
@@ -26,6 +27,8 @@ export default async function Home() {
       <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
         Poster processing and publishing. Local only — this never ships.
       </p>
+
+      <DriveStatus />
 
       {settings.updatedAt === 0 ? (
         <p className="mt-6 rounded border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-300">

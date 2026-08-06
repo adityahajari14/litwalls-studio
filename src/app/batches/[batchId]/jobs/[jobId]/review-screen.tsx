@@ -134,6 +134,42 @@ export function ReviewScreen({
     if (saved) router.push(`/batches/${job.batchId}`);
   }
 
+  async function fileToDrive() {
+    // Saved first: the Drive folder is named from the subject, which is read
+    // from disk rather than from this form's unsaved state.
+    const saved = await patch(
+      {
+        metadata: {
+          subject,
+          subtitle,
+          tags: tags.split(",").map((t) => t.trim()).filter(Boolean),
+          altText,
+        },
+      },
+      "drive",
+    );
+    if (!saved) return;
+
+    setBusy("drive");
+    try {
+      const response = await fetch(
+        `/api/batches/${job.batchId}/jobs/${job.id}/drive`,
+        { method: "POST" },
+      );
+      const result = await response.json();
+      if (!response.ok) {
+        setMessage(result.error ?? "Drive upload failed.");
+        return;
+      }
+      setJob(result.job);
+      setMessage(`Filed ${result.files} files to Drive.`);
+    } catch (cause) {
+      setMessage(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setBusy(null);
+    }
+  }
+
   const previewTitle = subject
     ? formatTitle(
         { subject, sequence: job.metadata?.sequence ?? 1, subtitle },
@@ -366,6 +402,18 @@ export function ReviewScreen({
               className="rounded border border-zinc-300 px-3 py-1.5 text-sm disabled:opacity-50 dark:border-zinc-700"
             >
               {busy === "rerender" ? "Rendering…" : "Save & re-render"}
+            </button>
+            <button
+              onClick={fileToDrive}
+              disabled={busy !== null}
+              className="rounded border border-zinc-300 px-3 py-1.5 text-sm disabled:opacity-50 dark:border-zinc-700"
+              title="Upload the print-ready files and the original to Google Drive"
+            >
+              {busy === "drive"
+                ? "Uploading…"
+                : job.drive
+                  ? "Re-file to Drive"
+                  : "File to Drive"}
             </button>
             <button
               onClick={approve}
