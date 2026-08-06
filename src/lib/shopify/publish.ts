@@ -118,31 +118,30 @@ async function stageImage(
 }
 
 /**
- * The publication id for the headless storefront.
+ * Every sales channel to publish to.
  *
- * THE most likely "I published it and the site doesn't show it" bug: a product
- * with status ACTIVE is live on the Online Store, but a headless storefront
- * reads through its own sales channel publication. Without publishing to that
- * channel the product is invisible to getProduct() despite looking published
- * in the admin.
+ * ALL of them, not a guess at the right one. This store has four publications
+ * — Online Store, Point of Sale, "Litwalls Headless" and "Headless" — and
+ * every existing product is on all four. An earlier version picked the first
+ * name matching /headless/, chose the wrong one of the two, and produced a
+ * product that looked published in the admin while being completely invisible
+ * to the storefront's getProduct(). That is the single most confusing failure
+ * this pipeline can produce, because nothing about it looks broken.
+ *
+ * SHOPIFY_PUBLICATION_ID still overrides, for a store that genuinely wants
+ * one channel only.
  */
-async function headlessPublicationId(): Promise<string | null> {
+async function publicationIds(): Promise<string[]> {
   const configured = process.env.SHOPIFY_PUBLICATION_ID?.trim();
-  if (configured) return configured;
+  if (configured) return [configured];
 
   try {
     const data = await admin<{
       publications: { nodes: { id: string; name: string }[] };
     }>(PUBLICATIONS);
-
-    const nodes = data.publications.nodes;
-    const preferred =
-      nodes.find((n) => /headless/i.test(n.name)) ??
-      nodes.find((n) => /storefront/i.test(n.name)) ??
-      nodes.find((n) => /online store/i.test(n.name));
-    return preferred?.id ?? null;
+    return data.publications.nodes.map((node) => node.id);
   } catch {
-    return null;
+    return [];
   }
 }
 
@@ -281,23 +280,28 @@ export async function publishJob(options: {
       if (node.alt) mediaIds[node.alt] = node.id;
     }
 
-    // Publishing to the sales channel is best-effort: the product exists
-    // either way, and failing the whole publish over a channel that can be
-    // fixed with one click in the admin would be the wrong trade.
-    const publicationId = await headlessPublicationId();
-    if (publicationId) {
+    // Channel publication is best-effort: the product exists either way, and
+    // failing the whole publish over something fixable with one click in the
+    // admin would be the wrong trade. A DRAFT product stays invisible
+    // regardless, so this is safe to run for both statuses.
+    const channels = await publicationIds();
+    if (channels.length > 0) {
       try {
         await admin(PUBLISHABLE_PUBLISH, {
           id: product.id,
-          input: [{ publicationId }],
+          input: channels.map((publicationId) => ({ publicationId })),
         });
       } catch (cause) {
         console.warn(
-          `publish: product created but not published to the channel: ${
+          `publish: product created but not published to its sales channels: ${
             cause instanceof Error ? cause.message : String(cause)
           }`,
         );
       }
+    } else {
+      console.warn(
+        "publish: no sales channels found — the product will not appear on the storefront.",
+      );
     }
 
     return ok({
