@@ -3,7 +3,9 @@ import { notFound } from "next/navigation";
 
 import { DropZone } from "@/app/batches/[batchId]/drop-zone";
 import { JobList } from "@/components/job-list";
+import { PublishButton } from "@/components/publish-button";
 import { RunButton } from "@/components/run-button";
+import { hasReached } from "@/lib/print/types";
 import { listJobs, readBatch } from "@/lib/pipeline/store";
 import { resolvePriceTable } from "@/lib/print/pricing";
 import { readSettings } from "@/lib/pipeline/settings";
@@ -68,6 +70,10 @@ export default async function BatchPage(
         </div>
 
         <JobList batchId={batch.id} initialJobs={jobs} />
+
+        {jobs.some((job) => hasReached(job.stage, "approved")) ? (
+          <PublishButton batchId={batch.id} />
+        ) : null}
       </section>
     </main>
   );

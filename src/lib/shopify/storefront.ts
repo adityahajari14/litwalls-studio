@@ -16,11 +16,20 @@ export class ShopifyError extends Error {
   // Node's strip-only TypeScript mode (used by `node --test`) rejects those,
   // and this module is reachable from the test suite.
   readonly detail?: unknown;
+  /**
+   * Whether sending the identical request again could plausibly succeed.
+   *
+   * Throttling and 5xx are worth another go; a rejected mutation will be
+   * rejected the same way every time, so retrying it only wastes time and
+   * delays a real error reaching the user.
+   */
+  readonly retryable: boolean;
 
-  constructor(message: string, detail?: unknown) {
+  constructor(message: string, detail?: unknown, retryable = false) {
     super(message);
     this.name = "ShopifyError";
     this.detail = detail;
+    this.retryable = retryable;
   }
 }
 
