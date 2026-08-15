@@ -80,7 +80,7 @@ export function NewTemplate() {
             type="file"
             accept="image/*"
             required
-            className="block w-full text-xs text-ink-500 file:mr-2 file:rounded file:border file:border-paper-300 file:bg-white file:px-2 file:py-1 file:text-xs file:text-ink-700"
+            className="block w-full text-xs text-ink-500 file:mr-2 file:rounded file:border file:border-paper-300 file:bg-paper-200 file:px-2 file:py-1 file:text-xs file:text-ink-700"
           />
         </Field>
 

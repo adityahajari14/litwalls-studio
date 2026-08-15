@@ -86,7 +86,7 @@ export function GalleryEditor({
             return (
               <li
                 key={key(ref)}
-                className="flex items-center gap-2 rounded-md border border-paper-200 bg-white p-1.5"
+                className="flex items-center gap-2 rounded-md border border-paper-200 bg-paper-200 p-1.5"
               >
                 <span className="tnum w-4 shrink-0 text-center text-xs text-ink-400">
                   {index + 1}

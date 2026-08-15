@@ -81,7 +81,7 @@ export function NewBatchForm({
               className={`rounded-full border px-3 py-1 text-sm transition-colors ${
                 category === id
                   ? "border-accent-600 bg-accent-600 text-white"
-                  : "border-paper-300 bg-white text-ink-600 hover:border-paper-400"
+                  : "border-paper-300 bg-paper-200 text-ink-600 hover:border-paper-400"
               }`}
             >
               {CATEGORY_LABEL[id]}

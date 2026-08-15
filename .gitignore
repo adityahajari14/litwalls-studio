@@ -48,3 +48,7 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Stranded atomic-write temp files. The retry in writeFileAtomic cleans
+# these up now, but one from before that fix should never be committed.
+*.tmp

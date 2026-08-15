@@ -464,7 +464,7 @@ export function TemplateEditor({
                   }) as MockupTemplate);
                   setSizeId(next);
                 }}
-                className="w-full rounded-md border border-paper-300 bg-white px-2.5 py-1.5 text-sm"
+                className="w-full rounded-md border border-paper-300 bg-paper-200 px-2.5 py-1.5 text-sm"
               >
                 {SIZES.map((s) => (
                   <option key={s.id} value={s.id}>
@@ -490,7 +490,7 @@ export function TemplateEditor({
                   if (file) void uploadBackground(file);
                   e.target.value = "";
                 }}
-                className="block w-full text-xs text-ink-500 file:mr-2 file:rounded file:border file:border-paper-300 file:bg-white file:px-2 file:py-1 file:text-xs file:text-ink-700"
+                className="block w-full text-xs text-ink-500 file:mr-2 file:rounded file:border file:border-paper-300 file:bg-paper-200 file:px-2 file:py-1 file:text-xs file:text-ink-700"
               />
             </label>
             <p className="mt-1 text-xs text-ink-400">

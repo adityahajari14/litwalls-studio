@@ -98,10 +98,10 @@ export function DropZone({
           void upload(event.dataTransfer.files);
         }}
         onClick={() => inputRef.current?.click()}
-        className={`cursor-pointer rounded-[--radius-card] border-2 border-dashed p-8 text-center transition-colors ${
+        className={`cursor-pointer rounded-[--radius-card] border border-dashed p-8 text-center transition-all duration-200 ${
           dragging
-            ? "border-accent-500 bg-accent-50"
-            : "border-paper-300 bg-white/60 hover:border-paper-400 hover:bg-white"
+            ? "border-accent-500 bg-accent-500/[0.07] shadow-[--shadow-flame]"
+            : "border-paper-400/60 bg-paper-100/40 hover:border-accent-500/50 hover:bg-paper-100/70"
         }`}
       >
         <input

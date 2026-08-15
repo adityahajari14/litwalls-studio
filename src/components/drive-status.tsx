@@ -1,5 +1,4 @@
-import Link from "next/link";
-
+import { ButtonLink, Card } from "@/components/ui";
 import { driveConfigured, driveConnected } from "@/lib/drive/auth";
 
 /**
@@ -13,35 +12,46 @@ import { driveConfigured, driveConnected } from "@/lib/drive/auth";
 export async function DriveStatus() {
   if (!driveConfigured()) {
     return (
-      <p className="mt-6 rounded border border-paper-200 px-3 py-2 text-sm text-ink-500">
-        Google Drive is not configured. Add{" "}
-        <code className="text-xs">GOOGLE_OAUTH_CLIENT_ID</code> and{" "}
-        <code className="text-xs">GOOGLE_OAUTH_CLIENT_SECRET</code> to{" "}
-        <code className="text-xs">.env.local</code> — see the README.
-      </p>
+      <Card className="p-3">
+        <p className="text-sm text-ink-500">
+          Google Drive is not configured. Add{" "}
+          <code className="font-mono text-xs text-ink-700">
+            GOOGLE_OAUTH_CLIENT_ID
+          </code>{" "}
+          and{" "}
+          <code className="font-mono text-xs text-ink-700">
+            GOOGLE_OAUTH_CLIENT_SECRET
+          </code>{" "}
+          to <code className="font-mono text-xs text-ink-700">.env.local</code> —
+          see the README.
+        </p>
+      </Card>
     );
   }
 
   if (!(await driveConnected())) {
     return (
-      <p className="mt-6 flex flex-wrap items-center gap-3 rounded border border-amber-300 px-3 py-2 text-sm">
-        <span className="text-amber-800">
+      <Card className="flex flex-wrap items-center justify-between gap-3 border-warn-500/30 p-3">
+        <p className="text-sm text-warn-700">
           Google Drive is not connected — print files cannot be filed yet.
-        </span>
-        <Link
-          href="/api/drive/connect"
-          className="rounded bg-ink-900 px-3 py-1 text-xs font-medium text-white"
-        >
+        </p>
+        <ButtonLink href="/api/drive/connect" variant="primary" size="sm">
           Connect Drive
-        </Link>
-      </p>
+        </ButtonLink>
+      </Card>
     );
   }
 
   return (
-    <p className="mt-6 text-xs text-ink-500">
-      Google Drive connected. Print files are filed to{" "}
-      <code>Litwalls Posters / &lt;Category&gt; / &lt;Product&gt;</code>.
+    <p className="flex items-center gap-2 text-xs text-ink-400">
+      <span
+        aria-hidden
+        className="size-1.5 rounded-full bg-ok-500 shadow-[0_0_6px_0_rgb(34_197_94_/_0.9)]"
+      />
+      Drive connected — filing to{" "}
+      <code className="font-mono text-ink-500">
+        Litwalls Posters / &lt;Category&gt; / &lt;Product&gt;
+      </code>
     </p>
   );
 }

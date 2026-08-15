@@ -3,12 +3,14 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
+import { Button } from "@/components/ui";
+
 /**
  * Publish approved posters to Shopify.
  *
- * Defaults to DRAFT and says so. Until the storefront handles size variants, a
- * live four-variant product sells A5 whatever the customer picks — so going
- * live has to be a deliberate choice rather than the path of least resistance.
+ * Defaults to DRAFT. Publishing straight to a live storefront should be a
+ * deliberate tick rather than the path of least resistance — a bad title or a
+ * wrong crop is far cheaper to fix before customers can see it.
  */
 export function PublishButton({ batchId }: { batchId: string }) {
   const router = useRouter();
@@ -56,37 +58,30 @@ export function PublishButton({ batchId }: { batchId: string }) {
   }
 
   return (
-    <div className="mt-4 rounded border border-paper-200 p-3">
-      <div className="flex flex-wrap items-center gap-3">
-        <button
-          onClick={publish}
-          disabled={pending}
-          className="rounded bg-ink-900 px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50"
-        >
-          {pending ? "Publishing…" : "Publish approved to Shopify"}
-        </button>
+    <div>
+      <div className="flex flex-wrap items-center gap-2.5">
+        <Button variant="primary" onClick={publish} disabled={pending}>
+          {pending ? "Publishing…" : "Publish to Shopify"}
+        </Button>
 
-        <label className="flex cursor-pointer items-center gap-1.5 text-xs">
+        <label className="flex cursor-pointer items-center gap-1.5 text-xs text-ink-500">
           <input
             type="checkbox"
             checked={live}
             onChange={(e) => setLive(e.target.checked)}
+            className="accent-[var(--color-accent-500)]"
           />
-          Publish live (ACTIVE) instead of draft
+          Go live (ACTIVE) instead of draft
         </label>
 
-        {result ? (
-          <span className="text-xs text-ink-600">
-            {result}
-          </span>
-        ) : null}
+        {result ? <span className="text-xs text-ink-600">{result}</span> : null}
       </div>
 
       {live ? (
-        <p className="mt-2 text-xs text-amber-700">
-          The storefront does not handle size variants yet — a live product will
-          sell A5 whichever size a customer chooses. Keep this off until the
-          storefront work is done.
+        <p className="mt-2 text-xs text-warn-700">
+          Live products appear on the storefront immediately. Worth publishing
+          one as a draft first and checking it in Shopify before doing a whole
+          batch.
         </p>
       ) : null}
 

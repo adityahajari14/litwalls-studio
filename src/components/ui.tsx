@@ -4,10 +4,9 @@ import type { ComponentProps, ReactNode } from "react";
 /**
  * Shared UI primitives.
  *
- * Deliberately small — a handful of components covering what this app actually
- * uses, rather than a component library. The point is that a button looks the
- * same on every screen without each screen restating a dozen utility classes,
- * which is how the styling drifted in the first place.
+ * Deliberately small — what this app actually uses, not a component library.
+ * The point is that a button looks the same everywhere without each screen
+ * restating a dozen utility classes, which is how the styling drifted before.
  */
 
 function cx(...parts: (string | false | null | undefined)[]) {
@@ -17,15 +16,19 @@ function cx(...parts: (string | false | null | undefined)[]) {
 /* ── Button ──────────────────────────────────────────────────────────── */
 
 const BUTTON_BASE =
-  "inline-flex items-center justify-center gap-1.5 rounded-md font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-45";
+  "inline-flex items-center justify-center gap-1.5 rounded-lg font-medium transition-all duration-150 active:translate-y-px disabled:cursor-not-allowed disabled:opacity-40 disabled:active:translate-y-0";
 
 const BUTTON_VARIANTS = {
-  primary: "bg-accent-600 text-white hover:bg-accent-700",
+  /* A flame gradient rather than a flat fill, matching the logo, plus a glow —
+     on a dark ground a flat filled button reads as just another panel. Dark
+     text on the warm fill, because white on orange fails contrast. */
+  primary:
+    "bg-gradient-to-b from-accent-500 to-accent-600 text-[#1a0a00] shadow-[0_0_18px_-4px_rgb(255_112_32_/_0.55)] hover:from-accent-700 hover:to-accent-500 hover:shadow-[0_0_26px_-3px_rgb(255_140_26_/_0.7)]",
   secondary:
-    "border border-paper-300 bg-white text-ink-700 hover:bg-paper-100 hover:border-paper-400",
-  ghost: "text-ink-500 hover:bg-paper-100 hover:text-ink-700",
+    "border border-paper-400/70 bg-paper-200 text-ink-700 hover:border-paper-500 hover:bg-paper-300 hover:text-ink-900",
+  ghost: "text-ink-500 hover:bg-paper-200 hover:text-ink-900",
   danger:
-    "border border-danger-500/30 bg-danger-50 text-danger-700 hover:bg-danger-500 hover:text-white hover:border-danger-500",
+    "border border-danger-500/30 bg-danger-50 text-danger-700 hover:border-danger-500/60 hover:bg-danger-500/15",
 } as const;
 
 const BUTTON_SIZES = {
@@ -80,14 +83,11 @@ export function ButtonLink({
 
 /* ── Surfaces ────────────────────────────────────────────────────────── */
 
-export function Card({
-  className,
-  ...props
-}: ComponentProps<"div">) {
+export function Card({ className, ...props }: ComponentProps<"div">) {
   return (
     <div
       className={cx(
-        "rounded-[--radius-card] border border-paper-200 bg-white shadow-[--shadow-card]",
+        "rounded-[--radius-card] border border-paper-300/80 bg-gradient-to-b from-paper-200/80 to-paper-100 shadow-[--shadow-card]",
         className,
       )}
       {...props}
@@ -96,7 +96,7 @@ export function Card({
 }
 
 /** A labelled section. The label is the smallest thing on screen on purpose —
- *  it orients without competing with the content it introduces. */
+ *  it orients without competing with what it introduces. */
 export function Section({
   title,
   action,
@@ -111,12 +111,18 @@ export function Section({
   return (
     <section className={className}>
       <div className="flex min-h-7 items-center justify-between gap-3">
-        <h2 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-400">
+        <h2 className="flex items-center gap-2 font-mono text-[10px] font-medium uppercase tracking-[0.2em] text-ink-400">
+          {/* A short flame tick before the label — a small brand signature
+              that also gives the eye an anchor when scanning for a section. */}
+          <span
+            aria-hidden
+            className="h-3 w-px bg-gradient-to-b from-accent-500 to-transparent"
+          />
           {title}
         </h2>
         {action}
       </div>
-      <div className="mt-2.5">{children}</div>
+      <div className="mt-3">{children}</div>
     </section>
   );
 }
@@ -124,11 +130,11 @@ export function Section({
 /* ── Badge ───────────────────────────────────────────────────────────── */
 
 const BADGE_TONES = {
-  neutral: "border-paper-300 bg-paper-100 text-ink-500",
-  ok: "border-ok-500/25 bg-ok-50 text-ok-700",
-  warn: "border-warn-500/25 bg-warn-50 text-warn-700",
-  danger: "border-danger-500/25 bg-danger-50 text-danger-700",
-  accent: "border-accent-500/25 bg-accent-50 text-accent-700",
+  neutral: "border-paper-400/50 bg-paper-200 text-ink-500",
+  ok: "border-ok-500/30 bg-ok-500/10 text-ok-700",
+  warn: "border-warn-500/30 bg-warn-500/10 text-warn-700",
+  danger: "border-danger-500/30 bg-danger-500/10 text-danger-700",
+  accent: "border-accent-500/35 bg-accent-500/10 text-accent-700",
 } as const;
 
 export function Badge({
@@ -139,7 +145,7 @@ export function Badge({
   return (
     <span
       className={cx(
-        "inline-flex items-center gap-1 whitespace-nowrap rounded-full border px-1.5 py-0.5 text-[11px] font-medium leading-4",
+        "inline-flex items-center gap-1 whitespace-nowrap rounded-md border px-1.5 py-0.5 text-[11px] font-medium leading-4",
         BADGE_TONES[tone],
         className,
       )}
@@ -151,7 +157,7 @@ export function Badge({
 /* ── Form fields ─────────────────────────────────────────────────────── */
 
 const CONTROL =
-  "w-full rounded-md border border-paper-300 bg-white px-2.5 py-1.5 text-sm text-ink-700 placeholder:text-ink-400 focus:border-accent-500 focus:outline-none focus:ring-1 focus:ring-accent-500";
+  "w-full rounded-lg border border-paper-300 bg-paper-200 px-2.5 py-1.5 text-sm text-ink-900 placeholder:text-ink-400 transition-colors focus:border-accent-500 focus:outline-none focus:ring-1 focus:ring-accent-500/60";
 
 export function Input({ className, ...props }: ComponentProps<"input">) {
   return <input className={cx(CONTROL, className)} {...props} />;
@@ -159,6 +165,10 @@ export function Input({ className, ...props }: ComponentProps<"input">) {
 
 export function Textarea({ className, ...props }: ComponentProps<"textarea">) {
   return <textarea className={cx(CONTROL, "resize-y", className)} {...props} />;
+}
+
+export function Select({ className, ...props }: ComponentProps<"select">) {
+  return <select className={cx(CONTROL, className)} {...props} />;
 }
 
 export function Field({
@@ -172,20 +182,34 @@ export function Field({
 }) {
   return (
     <label className="block">
-      <span className="mb-1 block text-xs font-medium text-ink-600">
+      <span className="mb-1.5 block text-xs font-medium text-ink-600">
         {label}
       </span>
       {children}
-      {hint ? <span className="mt-1 block text-xs text-ink-400">{hint}</span> : null}
+      {hint ? (
+        <span className="mt-1 block text-xs text-ink-400">{hint}</span>
+      ) : null}
     </label>
+  );
+}
+
+/** File input — the native control is stubbornly light without this. */
+export function FileInput({ className, ...props }: ComponentProps<"input">) {
+  return (
+    <input
+      type="file"
+      className={cx(
+        "block w-full text-xs text-ink-500",
+        "file:mr-2 file:cursor-pointer file:rounded-md file:border file:border-paper-300 file:bg-paper-200 file:px-2.5 file:py-1.5 file:text-xs file:font-medium file:text-ink-700 hover:file:border-paper-400 hover:file:text-ink-900",
+        className,
+      )}
+      {...props}
+    />
   );
 }
 
 /* ── Segmented control ───────────────────────────────────────────────── */
 
-/** Used for the size tabs and category picker: a small set of exclusive
- *  choices where seeing all the options at once matters more than saving
- *  space. */
 export function Segmented<T extends string>({
   options,
   value,
@@ -198,7 +222,7 @@ export function Segmented<T extends string>({
   size?: "sm" | "md";
 }) {
   return (
-    <div className="inline-flex rounded-md border border-paper-300 bg-paper-100 p-0.5">
+    <div className="inline-flex rounded-lg border border-paper-300 bg-paper-100 p-0.5">
       {options.map((option) => (
         <button
           key={option.value}
@@ -206,11 +230,11 @@ export function Segmented<T extends string>({
           onClick={() => onChange(option.value)}
           aria-pressed={value === option.value}
           className={cx(
-            "rounded font-medium transition-colors",
+            "rounded-md font-medium transition-all",
             size === "sm" ? "px-2 py-0.5 text-xs" : "px-2.5 py-1 text-sm",
             value === option.value
-              ? "bg-white text-ink-900 shadow-[--shadow-card]"
-              : "text-ink-500 hover:text-ink-700",
+              ? "bg-accent-500/15 text-accent-700 shadow-[inset_0_0_0_1px_rgb(255_140_26_/_0.35)]"
+              : "text-ink-500 hover:text-ink-900",
           )}
         >
           {option.label}
@@ -232,12 +256,12 @@ export function Empty({
   action?: ReactNode;
 }) {
   return (
-    <div className="rounded-[--radius-card] border border-dashed border-paper-300 bg-white/50 px-6 py-10 text-center">
+    <div className="rounded-[--radius-card] border border-dashed border-paper-300 bg-paper-100/40 px-6 py-12 text-center">
       <p className="text-sm font-medium text-ink-700">{title}</p>
       {children ? (
-        <p className="mx-auto mt-1 max-w-sm text-sm text-ink-500">{children}</p>
+        <p className="mx-auto mt-1.5 max-w-sm text-sm text-ink-500">{children}</p>
       ) : null}
-      {action ? <div className="mt-4">{action}</div> : null}
+      {action ? <div className="mt-5">{action}</div> : null}
     </div>
   );
 }
@@ -256,30 +280,41 @@ export function PageHeader({
   actions?: ReactNode;
 }) {
   return (
-    <header className="flex flex-wrap items-start justify-between gap-4 border-b border-paper-200 pb-5">
-      <div className="min-w-0">
-        {eyebrow ? <div className="mb-1.5">{eyebrow}</div> : null}
-        <h1 className="truncate text-xl font-semibold tracking-[-0.01em] text-ink-900">
-          {title}
-        </h1>
-        {meta ? (
-          <div className="mt-1.5 flex flex-wrap items-center gap-2 text-sm text-ink-500">
-            {meta}
+    <header className="pb-5">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="min-w-0">
+          {eyebrow ? <div className="mb-2.5">{eyebrow}</div> : null}
+          <h1 className="truncate bg-gradient-to-b from-ink-900 to-ink-600 bg-clip-text text-[1.65rem] font-semibold leading-tight tracking-[-0.025em] text-transparent">
+            {title}
+          </h1>
+          {meta ? (
+            <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-ink-500">
+              {meta}
+            </div>
+          ) : null}
+        </div>
+        {actions ? (
+          <div className="flex shrink-0 flex-wrap items-center gap-2">
+            {actions}
           </div>
         ) : null}
       </div>
-      {actions ? (
-        <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div>
-      ) : null}
+      <hr className="rule-fade mt-5" />
     </header>
   );
 }
 
-export function BackLink({ href, children }: { href: string; children: ReactNode }) {
+export function BackLink({
+  href,
+  children,
+}: {
+  href: string;
+  children: ReactNode;
+}) {
   return (
     <Link
       href={href}
-      className="inline-flex items-center gap-1 text-sm text-ink-500 transition-colors hover:text-ink-900"
+      className="inline-flex items-center gap-1.5 font-mono text-xs uppercase tracking-[0.1em] text-ink-400 transition-colors hover:text-accent-700"
     >
       <span aria-hidden>←</span>
       {children}

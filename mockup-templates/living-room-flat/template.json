@@ -3,8 +3,18 @@
   "name": "Living room — straight on",
   "kind": "flat",
   "background": "background.jpg",
-  "canvas": { "width": 2000, "height": 1500 },
-  "rect": { "x": 620, "y": 210, "width": 700, "height": 990 },
-  "shadow": 0.22,
-  "suitsAspect": [0.707]
+  "canvas": {
+    "width": 2000,
+    "height": 1500
+  },
+  "rect": {
+    "x": 620,
+    "y": 210,
+    "width": 700,
+    "height": 990
+  },
+  "shadow": 0.23,
+  "suitsAspect": [
+    0.707
+  ]
 }

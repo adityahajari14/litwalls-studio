@@ -1,100 +1,258 @@
 @import "tailwindcss";
 
 /**
- * Litwalls Studio design tokens.
+ * Litwalls Studio — dark UI.
  *
- * A warm neutral palette rather than pure grey: poster artwork is the subject
- * of every screen here, and a cold blue-grey chrome fights the warm paper
- * tones in the mockups. Everything is defined once, as a token, so a change
- * lands everywhere rather than in the twelve places a colour was hardcoded.
+ * Dark is functional here rather than fashionable: every screen is dominated
+ * by poster artwork and room mockups, and bright chrome competes with them.
+ * Against a near-black ground the artwork is the brightest thing on screen,
+ * which is the hierarchy you want when the job is judging images.
+ *
+ * The accent is the brand's flame — sampled straight from the Litwalls logo
+ * (#ff7020 → #ffb020). A warm accent on a cool neutral ground is what keeps
+ * this from looking like every other dark dashboard, and it means the logo
+ * belongs rather than sitting on top of an unrelated palette.
+ *
+ * Token names carry their meaning: `paper-*` is surfaces ascending from the
+ * page ground, `ink-*` is text ascending toward maximum contrast.
  */
 
 @theme {
-  /* Warm neutrals — the chrome. */
-  --color-paper-50: #fbfaf9;
-  --color-paper-100: #f5f3f0;
-  --color-paper-200: #e9e5e0;
-  --color-paper-300: #d6d0c8;
-  --color-paper-400: #a8a099;
-  --color-paper-500: #7d746c;
-  --color-paper-600: #5c544d;
-  --color-paper-700: #423b36;
-  --color-paper-800: #2a2521;
-  --color-paper-900: #1a1613;
+  /* Surfaces — very slightly blue, so the warm accent reads as warm. */
+  --color-paper-50: #08090c;
+  --color-paper-100: #0d0f14;
+  --color-paper-200: #14171e;
+  --color-paper-300: #1f232d;
+  --color-paper-400: #2e3441;
+  --color-paper-500: #454c5c;
+  --color-paper-600: #626a7d;
+  --color-paper-700: #8a92a4;
+  --color-paper-800: #b5bcc9;
+  --color-paper-900: #e8eaef;
 
-  /* Ink — ~AA or better on paper-50 for 600 and above. */
-  --color-ink-400: #8a827a;
-  --color-ink-500: #6b635b;
-  --color-ink-600: #4a433d;
-  --color-ink-700: #332d28;
-  --color-ink-900: #17130f;
+  /* Text. ink-500 and up clear 4.5:1 on paper-100; ink-400 is for genuinely
+     secondary text and clears 3:1. */
+  --color-ink-400: #6e7789;
+  --color-ink-500: #939bad;
+  --color-ink-600: #b4bbc9;
+  --color-ink-700: #d5d9e2;
+  --color-ink-900: #f4f6fa;
 
-  /* One accent, used sparingly: primary actions and the current selection. */
-  --color-accent-50: #eef4ff;
-  --color-accent-100: #dbe7ff;
-  --color-accent-300: #9fbaff;
-  --color-accent-500: #3b6ef5;
-  --color-accent-600: #2d55d0;
-  --color-accent-700: #2544a8;
+  /* The flame, straight from the logo. */
+  --color-accent-50: #1d0e03;
+  --color-accent-100: #2e1605;
+  --color-accent-300: #c96a17;
+  --color-accent-500: #ff8c1a;
+  --color-accent-600: #ff7020;
+  --color-accent-700: #ffb020;
 
-  /* Status. Warning and danger are deliberately distinguishable without
-     relying on hue alone — every badge also carries a word. */
-  --color-ok-50: #ecfdf3;
-  --color-ok-500: #12a150;
-  --color-ok-700: #0a6b35;
-  --color-warn-50: #fff8eb;
-  --color-warn-500: #d68b0b;
-  --color-warn-700: #96610a;
-  --color-danger-50: #fef2f2;
-  --color-danger-500: #dc3545;
-  --color-danger-700: #a32330;
+  --color-ok-50: #04180f;
+  --color-ok-500: #1fbf6b;
+  --color-ok-700: #5ee39c;
+  --color-warn-50: #1d1304;
+  --color-warn-500: #e0a020;
+  --color-warn-700: #f5c95c;
+  --color-danger-50: #200a0e;
+  --color-danger-500: #f0475f;
+  --color-danger-700: #ff9aa8;
 
   --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-geist-mono), ui-monospace, monospace;
 
-  --radius-card: 0.625rem;
+  --radius-card: 0.875rem;
 
-  /* Soft, low-contrast elevation — a tool, not a toy. */
-  --shadow-card: 0 1px 2px rgb(23 19 15 / 0.04), 0 1px 3px rgb(23 19 15 / 0.06);
-  --shadow-pop: 0 4px 12px rgb(23 19 15 / 0.08), 0 2px 4px rgb(23 19 15 / 0.04);
+  /* Depth on a dark ground comes from a lit top edge, not a drop shadow —
+     a shadow under a dark card is invisible. */
+  --shadow-card:
+    inset 0 1px 0 0 rgb(255 255 255 / 0.05),
+    0 1px 2px rgb(0 0 0 / 0.6);
+  --shadow-pop:
+    inset 0 1px 0 0 rgb(255 255 255 / 0.08),
+    0 12px 32px -8px rgb(0 0 0 / 0.7);
+  --shadow-flame:
+    0 0 0 1px rgb(255 140 26 / 0.28),
+    0 6px 24px -6px rgb(255 112 32 / 0.4);
 }
 
 html {
-  /* Scrollbar gutter reserved so navigating between a short page and a long
-     one does not shift the whole layout sideways. */
   scrollbar-gutter: stable;
+  color-scheme: dark;
 }
 
 body {
   background: var(--color-paper-50);
   color: var(--color-ink-700);
-  /* Was Arial — the create-next-app default that never got replaced, which is
-     most of why this looked unfinished. */
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
-/* Numbers in tables and prices line up only if they are tabular. */
+/**
+ * Page atmosphere: a warm bloom at the top, and a fine grid beneath it.
+ *
+ * Both are fixed and masked so they fade out down the page — the effect
+ * belongs to the chrome, not to the content, and content that scrolls past a
+ * static texture looks like it is sliding on glass.
+ */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background:
+    radial-gradient(
+      ellipse 70% 45% at 50% -10%,
+      rgb(255 112 32 / 0.09),
+      transparent 70%
+    ),
+    radial-gradient(
+      ellipse 50% 40% at 92% 0%,
+      rgb(255 176 32 / 0.05),
+      transparent 65%
+    );
+}
+
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background-image:
+    linear-gradient(rgb(255 255 255 / 0.02) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(255 255 255 / 0.02) 1px, transparent 1px);
+  background-size: 56px 56px;
+  mask-image: radial-gradient(
+    ellipse 90% 55% at 50% 0%,
+    #000 30%,
+    transparent 100%
+  );
+}
+
+body > * {
+  position: relative;
+  z-index: 1;
+}
+
 .tnum {
   font-variant-numeric: tabular-nums;
 }
 
-/* A consistent, visible focus ring. Keyboard shortcuts are a first-class way
-   to drive the review screen, so focus must never be invisible. */
 :where(a, button, input, select, textarea, [tabindex]):focus-visible {
   outline: 2px solid var(--color-accent-500);
   outline-offset: 2px;
-  border-radius: 4px;
+  border-radius: 6px;
 }
 
-/* Checkerboard behind transparent artwork, so a PNG with an alpha channel
-   reads as transparent rather than white. */
+/* Native controls default to a light palette; without this, checkboxes and
+   file pickers stay stubbornly white. */
+input,
+textarea,
+select {
+  color-scheme: dark;
+}
+
+/** Checkerboard behind transparent artwork, in dark tones. */
 .checkerboard {
+  background-color: var(--color-paper-200);
   background-image:
-    linear-gradient(45deg, var(--color-paper-200) 25%, transparent 25%),
-    linear-gradient(-45deg, var(--color-paper-200) 25%, transparent 25%),
-    linear-gradient(45deg, transparent 75%, var(--color-paper-200) 75%),
-    linear-gradient(-45deg, transparent 75%, var(--color-paper-200) 75%);
+    linear-gradient(45deg, rgb(255 255 255 / 0.028) 25%, transparent 25%),
+    linear-gradient(-45deg, rgb(255 255 255 / 0.028) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, rgb(255 255 255 / 0.028) 75%),
+    linear-gradient(-45deg, transparent 75%, rgb(255 255 255 / 0.028) 75%);
   background-size: 16px 16px;
   background-position: 0 0, 0 8px, 8px -8px, -8px 0;
+}
+
+/**
+ * A hairline rule that fades at both ends.
+ *
+ * A flat border across a dark page reads as a seam; one that dissolves reads
+ * as intentional.
+ */
+.rule-fade {
+  border: 0;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--color-paper-400) 12%,
+    var(--color-paper-400) 88%,
+    transparent
+  );
+}
+
+/**
+ * Flame text, for the wordmark and headline numerals.
+ *
+ * The same gradient as the logo, so type and mark are visibly the same brand.
+ */
+.flame-text {
+  background: linear-gradient(
+    100deg,
+    var(--color-accent-600),
+    var(--color-accent-500) 45%,
+    var(--color-accent-700)
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/**
+ * A card that lights along its top edge on hover.
+ *
+ * Cheap to render (one pseudo-element, opacity only) and it gives a grid of
+ * poster thumbnails a sense of response without moving anything — movement in
+ * a dense grid is noise.
+ */
+.edge-lit {
+  position: relative;
+}
+
+.edge-lit::after {
+  content: "";
+  position: absolute;
+  inset-inline: 12%;
+  top: -1px;
+  height: 1px;
+  opacity: 0;
+  transition: opacity 220ms ease;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--color-accent-500),
+    transparent
+  );
+  pointer-events: none;
+}
+
+.edge-lit:hover::after,
+.edge-lit:focus-within::after {
+  opacity: 0.9;
+}
+
+/** A slow pulse for live/processing indicators. */
+@keyframes breathe {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+.breathe {
+  animation: breathe 2.4s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .breathe {
+    animation: none;
+  }
+  .edge-lit::after {
+    transition: none;
+  }
 }

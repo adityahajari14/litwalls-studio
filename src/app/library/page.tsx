@@ -29,11 +29,11 @@ export default async function LibraryPage() {
       <Card className="mt-6 bg-paper-100/60 p-4">
         <p className="text-sm text-ink-600">
           Drop image files into{" "}
-          <code className="rounded bg-white px-1.5 py-0.5 font-mono text-xs text-ink-700">
+          <code className="rounded bg-paper-200 px-1.5 py-0.5 font-mono text-xs text-ink-700">
             product-images/
           </code>{" "}
           and reload. Names and roles are guessed from the filename — call one{" "}
-          <code className="rounded bg-white px-1 font-mono text-xs">
+          <code className="rounded bg-paper-200 px-1 font-mono text-xs">
             size-guide.png
           </code>{" "}
           and it is recognised automatically.

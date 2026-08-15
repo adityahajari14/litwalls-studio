@@ -152,7 +152,7 @@ export function PlacementEditor({
               height: pct(ghost.rect.height, canvas.height),
             }}
           >
-            <span className="absolute -top-4 left-0 rounded bg-black/50 px-1 text-[10px] text-white">
+            <span className="absolute -top-4 left-0 rounded bg-paper-50/80 px-1 text-[10px] text-white">
               {ghost.label}
             </span>
           </span>

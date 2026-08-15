@@ -75,7 +75,7 @@ export default async function Home() {
             {withCounts.map(({ batch, jobs }) => (
               <li key={batch.id}>
                 <Link href={`/batches/${batch.id}`} className="block">
-                  <Card className="h-full p-4 transition-shadow hover:shadow-[--shadow-pop]">
+                  <Card className="edge-lit h-full p-4 transition-all duration-200 hover:border-paper-400 hover:shadow-[--shadow-pop]">
                     <div className="flex items-start justify-between gap-2">
                       <h3 className="truncate font-medium text-ink-900">
                         {batch.name}
@@ -83,12 +83,12 @@ export default async function Home() {
                       <Badge>{CATEGORY_LABEL[batch.category]}</Badge>
                     </div>
 
-                    <p className="mt-1 text-xs text-ink-400">
+                    <p className="tnum mt-1 font-mono text-[11px] uppercase tracking-[0.1em] text-ink-400">
                       {jobs.length} poster{jobs.length === 1 ? "" : "s"}
                       {batch.kind === "split3" ? " · split" : ""}
                     </p>
 
-                    <div className="mt-3 flex flex-wrap gap-1">
+                    <div className="mt-3.5 flex flex-wrap gap-1">
                       <Progress jobs={jobs} />
                     </div>
                   </Card>

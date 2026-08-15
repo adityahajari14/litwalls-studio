@@ -150,7 +150,7 @@ export function CropEditor({
         {seams.map((seam, index) => (
           <span
             key={index}
-            className="absolute top-0 h-full w-px bg-white/70"
+            className="absolute top-0 h-full w-px bg-paper-200/70"
             style={{ left: `${((seam - rect.x) / rect.width) * 100}%` }}
           />
         ))}
@@ -159,7 +159,7 @@ export function CropEditor({
       {/* Gemini's subject box, so it is clear WHY the crop sits where it does. */}
       {focal && focal.source !== "fallback" ? (
         <span
-          className="pointer-events-none absolute border border-dashed border-amber-400"
+          className="pointer-events-none absolute border border-dashed border-warn-500"
           style={{
             left: `${focal.subject.x * 100}%`,
             top: `${focal.subject.y * 100}%`,

@@ -1,6 +1,6 @@
 import "server-only";
 
-import { mkdir, rename, writeFile } from "node:fs/promises";
+import { mkdir, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, join, resolve, sep } from "node:path";
 
 /**
@@ -108,7 +108,36 @@ export async function writeFileAtomic(
   await ensureDir(dirname(path));
   const tmp = `${path}.${process.pid}.${Date.now()}.tmp`;
   await writeFile(tmp, data);
-  await rename(tmp, path);
+
+  /**
+   * Rename, retrying on Windows sharing violations.
+   *
+   * POSIX rename replaces the destination unconditionally. Windows refuses
+   * with EPERM/EACCES/EBUSY while any other handle has the destination open —
+   * and something almost always does here: `loadTemplates()` re-reads
+   * template.json on every request, the dev server watches the project tree,
+   * and antivirus scans files as they are written. Saving a mockup template
+   * failed outright because of this.
+   *
+   * The handles are transient, so a few short retries clear it. The temp file
+   * is removed on final failure rather than left beside the real one, where it
+   * would look like a half-written save.
+   */
+  let lastError: unknown;
+  for (let attempt = 0; attempt < 6; attempt++) {
+    try {
+      await rename(tmp, path);
+      return;
+    } catch (cause) {
+      lastError = cause;
+      const code = (cause as NodeJS.ErrnoException).code;
+      if (code !== "EPERM" && code !== "EACCES" && code !== "EBUSY") break;
+      await new Promise((resolve) => setTimeout(resolve, 40 * (attempt + 1)));
+    }
+  }
+
+  await rm(tmp, { force: true }).catch(() => undefined);
+  throw lastError;
 }
 
 /** Write JSON atomically, formatted so a human can read and edit it. */

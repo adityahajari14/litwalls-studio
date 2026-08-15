@@ -147,13 +147,16 @@ function JobCard({
   return (
     <li className="group relative">
       <div
-        className={`overflow-hidden rounded-[--radius-card] border bg-white transition-shadow ${
+        className={`edge-lit overflow-hidden rounded-[--radius-card] border bg-gradient-to-b from-paper-200/80 to-paper-100 transition-all duration-200 ${
           selected
-            ? "border-accent-500 ring-1 ring-accent-500"
-            : "border-paper-200 hover:shadow-[--shadow-pop]"
+            ? "border-accent-500/70 shadow-[--shadow-flame]"
+            : "border-paper-300/80 hover:border-paper-400 hover:shadow-[--shadow-pop]"
         }`}
       >
-        <div className="relative aspect-[4/3] bg-paper-100">
+        {/* A plain ground, not the checkerboard: these renders are opaque
+            JPEGs, so a checker pattern only fills the letterbox bars with
+            noise. The checkerboard belongs where transparency is real. */}
+        <div className="relative aspect-[4/3] bg-paper-50">
           {preview ? (
             /* eslint-disable-next-line @next/next/no-img-element */
             <img
@@ -162,17 +165,28 @@ function JobCard({
               // Contain, not cover: a room mockup is mostly room, and cropping
               // it to fill the card can cut the poster itself out of frame —
               // which defeats the point of showing a thumbnail at all.
-              className="h-full w-full object-contain"
+              className="h-full w-full object-contain transition-transform duration-300 group-hover:scale-[1.03]"
             />
           ) : (
-            <div className="grid h-full place-items-center text-xs text-ink-400">
-              {job.status.kind === "running" ? "processing…" : "not processed"}
+            <div className="grid h-full place-items-center gap-1.5 text-xs text-ink-400">
+              {job.status.kind === "running" ? (
+                <>
+                  <span className="breathe size-1.5 rounded-full bg-accent-500 shadow-[0_0_8px_0_rgb(255_140_26_/_0.9)]" />
+                  <span className="font-mono uppercase tracking-[0.14em]">
+                    processing
+                  </span>
+                </>
+              ) : (
+                <span className="font-mono uppercase tracking-[0.14em]">
+                  queued
+                </span>
+              )}
             </div>
           )}
 
           {reviewable ? (
             <label
-              className="absolute left-2 top-2 grid size-5 cursor-pointer place-items-center rounded border border-paper-300 bg-white/90 shadow-sm"
+              className="absolute left-2 top-2 grid size-5 cursor-pointer place-items-center rounded border border-paper-300 bg-paper-200/90 shadow-sm"
               onClick={(e) => e.stopPropagation()}
             >
               <input
