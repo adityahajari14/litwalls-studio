@@ -2,6 +2,7 @@ import "server-only";
 
 import { readFile } from "node:fs/promises";
 
+import { stageLibraryImage } from "@/lib/library/media";
 import { jobAsset } from "@/lib/pipeline/paths";
 import { descriptionFor } from "@/lib/print/description";
 import { resolvePriceTable, validCompareAt } from "@/lib/print/pricing";
@@ -10,6 +11,7 @@ import { ensureCategoryTag, formatTitle } from "@/lib/print/title";
 import type {
   Batch,
   PosterJob,
+  ProductImageRef,
   ShopifyRefs,
   SizeId,
 } from "@/lib/print/types";
@@ -99,6 +101,61 @@ function mediaFor(job: PosterJob, sizeId: SizeId) {
   );
 }
 
+/**
+ * The product's image gallery, in display order.
+ *
+ * Built from `job.images` when a human has curated it on the review screen,
+ * and otherwise defaulted to "every rendered mockup, then every library
+ * image". The default matters: a batch published without anyone opening the
+ * review screen should still get a proper gallery rather than nothing.
+ *
+ * A single failed image never fails the publish — a product with one missing
+ * gallery shot is worth far more than no product at all.
+ */
+async function stageGallery(
+  job: PosterJob,
+  subject: string,
+): Promise<{ originalSource: string; alt: string }[]> {
+  const curated = job.images.length > 0 ? job.images : defaultGallery(job);
+  const out: { originalSource: string; alt: string }[] = [];
+
+  for (const ref of curated) {
+    try {
+      if (ref.kind === "mockup") {
+        const mockup = job.mockups.find((m) => m.templateId === ref.templateId);
+        if (!mockup) continue;
+        out.push(
+          await stageImage(job, mockup.relPath, `${subject} — in a room`),
+        );
+      } else if (ref.kind === "library") {
+        const file = await stageLibraryImage(ref.libraryId);
+        if (file) out.push(file);
+      } else {
+        out.push(await stageImage(job, ref.relPath, subject));
+      }
+    } catch (cause) {
+      console.warn(
+        `publish: skipped a gallery image for ${job.sourceName}: ${
+          cause instanceof Error ? cause.message : String(cause)
+        }`,
+      );
+    }
+  }
+
+  return out;
+}
+
+/** What the gallery contains when nobody has curated one. */
+function defaultGallery(job: PosterJob): ProductImageRef[] {
+  return [
+    ...job.mockups.map((m) => ({
+      kind: "mockup" as const,
+      templateId: m.templateId,
+    })),
+    ...job.images.filter((image) => image.kind === "library"),
+  ];
+}
+
 async function stageImage(
   job: PosterJob,
   relPath: string,
@@ -181,8 +238,8 @@ export async function publishJob(options: {
   });
 
   try {
-    // Staged in parallel: four independent uploads that do not depend on each
-    // other, and doing them in sequence quadruples the wait for no benefit.
+    // Staged in parallel: independent uploads that do not depend on each
+    // other, and doing them in sequence multiplies the wait for no benefit.
     const staged = await Promise.all(
       SIZES.map(async (size) => {
         const asset = mediaFor(job, size.id);
@@ -194,6 +251,16 @@ export async function publishJob(options: {
         };
       }),
     );
+
+    // The gallery: mockups first, then shared library images, then the plain
+    // artwork. Mockups lead because a poster on a wall sells better than a
+    // flat scan of it, and Shopify uses the first image as the thumbnail
+    // everywhere — collection cards, search, checkout.
+    //
+    // Until now this was omitted entirely and only the four per-variant
+    // images were sent, so every mockup the pipeline rendered was discarded
+    // at the last step.
+    const gallery = await stageGallery(job, subject);
 
     const variants = SIZES.map((size) => {
       const file = staged.find((s) => s?.sizeId === size.id)?.file;
@@ -214,9 +281,24 @@ export async function publishJob(options: {
     // "File original source missing from the product files input" — the
     // variant `file` field attaches an image to a variant, it does not add
     // that image to the product.
-    const files = staged
-      .filter((entry): entry is NonNullable<typeof entry> => entry !== null)
-      .map((entry) => ({ ...entry.file, contentType: "IMAGE" as const }));
+    //
+    // Gallery images come FIRST so images[0] — which Shopify uses as the
+    // product thumbnail — is a mockup rather than a bare A5 scan. The
+    // per-variant files follow, deduplicated by source: a file referenced
+    // twice makes Shopify reject the whole mutation.
+    const seen = new Set<string>();
+    const files = [
+      ...gallery,
+      ...staged
+        .filter((entry): entry is NonNullable<typeof entry> => entry !== null)
+        .map((entry) => entry.file),
+    ]
+      .filter((file) => {
+        if (seen.has(file.originalSource)) return false;
+        seen.add(file.originalSource);
+        return true;
+      })
+      .map((file) => ({ ...file, contentType: "IMAGE" as const }));
 
     const data = await admin<{
       productSet: {

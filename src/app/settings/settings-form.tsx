@@ -4,6 +4,7 @@ import { useActionState } from "react";
 
 import { saveSettings, type SaveState } from "@/app/settings/actions";
 import { PriceTable } from "@/components/price-table";
+import { Button } from "@/components/ui";
 import type { PartialPriceTable, PriceTable as Prices } from "@/lib/print/pricing";
 
 export function SettingsForm({
@@ -35,20 +36,14 @@ export function SettingsForm({
       />
 
       <div className="mt-6 flex items-center gap-3">
-        <button
-          type="submit"
-          disabled={pending}
-          className="rounded bg-zinc-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900"
-        >
+        <Button type="submit" variant="primary" disabled={pending}>
           {pending ? "Saving…" : "Save defaults"}
-        </button>
+        </Button>
 
         {state ? (
           <span
             className={
-              state.ok
-                ? "text-sm text-emerald-600 dark:text-emerald-400"
-                : "text-sm text-amber-600 dark:text-amber-400"
+              state.ok ? "text-sm text-ok-700" : "text-sm text-warn-700"
             }
           >
             {state.message}
@@ -57,7 +52,7 @@ export function SettingsForm({
       </div>
 
       {!saved && !state ? (
-        <p className="mt-4 text-xs text-amber-600 dark:text-amber-400">
+        <p className="mt-4 text-xs text-warn-700">
           These are placeholder figures. Every existing product sells at ₹149,
           so set real prices before the first publish.
         </p>

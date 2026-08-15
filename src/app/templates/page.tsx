@@ -14,7 +14,7 @@ export default async function TemplatesPage() {
     <main className="mx-auto w-full max-w-4xl px-6 py-16">
       <Link
         href="/"
-        className="text-sm text-zinc-500 underline-offset-4 hover:underline"
+        className="text-sm text-ink-500 underline-offset-4 hover:underline"
       >
         ← Dashboard
       </Link>
@@ -22,7 +22,7 @@ export default async function TemplatesPage() {
       <h1 className="mt-4 text-2xl font-semibold tracking-tight">
         Mockup templates
       </h1>
-      <p className="mt-2 max-w-2xl text-sm text-zinc-600 dark:text-zinc-400">
+      <p className="mt-2 max-w-2xl text-sm text-ink-600">
         Room photos that posters are composited into. To add one, create a
         folder under <code className="text-xs">mockup-templates/</code>, drop in
         a <code className="text-xs">background.jpg</code>, and reload this page
@@ -30,7 +30,7 @@ export default async function TemplatesPage() {
       </p>
 
       {entries.length === 0 ? (
-        <p className="mt-8 rounded border border-zinc-200 p-6 text-sm text-zinc-500 dark:border-zinc-800">
+        <p className="mt-8 rounded border border-paper-200 p-6 text-sm text-ink-500">
           No templates yet. Create{" "}
           <code className="text-xs">mockup-templates/my-room/background.jpg</code>{" "}
           to get started.
@@ -39,7 +39,7 @@ export default async function TemplatesPage() {
 
       {usable.length > 0 ? (
         <section className="mt-10">
-          <h2 className="text-xs font-medium uppercase tracking-widest text-zinc-500">
+          <h2 className="text-xs font-medium uppercase tracking-widest text-ink-500">
             Ready ({usable.length})
           </h2>
           <ul className="mt-4 grid gap-6 sm:grid-cols-2">
@@ -49,7 +49,7 @@ export default async function TemplatesPage() {
               return (
                 <li
                   key={t.id}
-                  className="overflow-hidden rounded-lg border border-zinc-200 dark:border-zinc-800"
+                  className="overflow-hidden rounded-lg border border-paper-200"
                 >
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
@@ -59,7 +59,7 @@ export default async function TemplatesPage() {
                   />
                   <div className="p-3">
                     <p className="text-sm font-medium">{t.name}</p>
-                    <p className="mt-0.5 text-xs text-zinc-500">
+                    <p className="mt-0.5 text-xs text-ink-500">
                       {t.kind === "perspective" ? "Perspective" : "Flat"} ·{" "}
                       {t.canvas.width}×{t.canvas.height} ·{" "}
                       <code>{t.id}</code>
@@ -74,7 +74,7 @@ export default async function TemplatesPage() {
 
       {broken.length > 0 ? (
         <section className="mt-10">
-          <h2 className="text-xs font-medium uppercase tracking-widest text-zinc-500">
+          <h2 className="text-xs font-medium uppercase tracking-widest text-ink-500">
             Needs attention ({broken.length})
           </h2>
           <ul className="mt-4 space-y-6">
@@ -83,12 +83,12 @@ export default async function TemplatesPage() {
               return (
                 <li
                   key={entry.id}
-                  className="rounded-lg border border-amber-300 p-4 dark:border-amber-900"
+                  className="rounded-lg border border-warn-500/30 p-4"
                 >
                   <p className="text-sm font-medium">
                     <code>{entry.id}</code>
                   </p>
-                  <ul className="mt-1 space-y-0.5 text-xs text-amber-700 dark:text-amber-400">
+                  <ul className="mt-1 space-y-0.5 text-xs text-warn-700">
                     {entry.errors.map((error) => (
                       <li key={error}>{error}</li>
                     ))}

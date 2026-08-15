@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { PriceTable } from "@/components/price-table";
+import { Button, Field, Input } from "@/components/ui";
 import type { PartialPriceTable, PriceTable as Prices } from "@/lib/print/pricing";
 import { CATEGORY_LABEL, CATEGORY_IDS, CATEGORY_TAG } from "@/lib/print/title";
 import type { CategoryId, PosterKind } from "@/lib/print/types";
@@ -62,43 +63,34 @@ export function NewBatchForm({
 
   return (
     <form onSubmit={onSubmit} className="mt-8 space-y-8">
-      <div>
-        <label htmlFor="name" className="block text-sm font-medium">
-          Batch name
-        </label>
-        <input
-          id="name"
-          name="name"
-          required
-          placeholder="Marvel drop — March"
-          className="mt-1.5 w-full rounded border border-zinc-300 bg-transparent px-3 py-2 text-sm dark:border-zinc-700"
-        />
-        <p className="mt-1 text-xs text-zinc-500">
-          For your reference only — never shown to customers.
-        </p>
-      </div>
+      <Field
+        label="Batch name"
+        hint="For your reference only — never shown to customers."
+      >
+        <Input name="name" required placeholder="Marvel drop — March" />
+      </Field>
 
       <fieldset>
-        <legend className="text-sm font-medium">Category</legend>
+        <legend className="text-sm font-medium text-ink-700">Category</legend>
         <div className="mt-2 flex flex-wrap gap-2">
           {CATEGORY_IDS.map((id) => (
             <button
               key={id}
               type="button"
               onClick={() => setCategory(id)}
-              className={`rounded-full border px-3 py-1 text-sm ${
+              className={`rounded-full border px-3 py-1 text-sm transition-colors ${
                 category === id
-                  ? "border-zinc-900 bg-zinc-900 text-white dark:border-zinc-100 dark:bg-zinc-100 dark:text-zinc-900"
-                  : "border-zinc-300 dark:border-zinc-700"
+                  ? "border-accent-600 bg-accent-600 text-white"
+                  : "border-paper-300 bg-white text-ink-600 hover:border-paper-400"
               }`}
             >
               {CATEGORY_LABEL[id]}
             </button>
           ))}
         </div>
-        <p className="mt-2 text-xs text-zinc-500">
+        <p className="mt-2 text-xs text-ink-500">
           Sets the title suffix and adds the{" "}
-          <code className="rounded bg-zinc-100 px-1 dark:bg-zinc-800">
+          <code className="rounded bg-paper-100 px-1">
             {CATEGORY_TAG[category]}
           </code>{" "}
           tag, which is what puts the product in the {CATEGORY_LABEL[category]}{" "}
@@ -119,7 +111,7 @@ export function NewBatchForm({
             />
             <span className="text-sm">
               <span className="font-medium">Normal</span>
-              <span className="block text-xs text-zinc-500">
+              <span className="block text-xs text-ink-500">
                 One sheet per poster.
               </span>
             </span>
@@ -134,7 +126,7 @@ export function NewBatchForm({
             />
             <span className="text-sm">
               <span className="font-medium">Split — 3 panels</span>
-              <span className="block text-xs text-zinc-500">
+              <span className="block text-xs text-ink-500">
                 One artwork across three sheets, sold as one product. The size
                 chosen is the size of each panel.
               </span>
@@ -157,15 +149,11 @@ export function NewBatchForm({
       </div>
 
       <div className="flex items-center gap-3">
-        <button
-          type="submit"
-          disabled={pending}
-          className="rounded bg-zinc-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900"
-        >
+        <Button type="submit" variant="primary" disabled={pending}>
           {pending ? "Creating…" : "Create batch"}
-        </button>
+        </Button>
         {error ? (
-          <span className="text-sm text-red-600 dark:text-red-400">{error}</span>
+          <span className="text-sm text-danger-700">{error}</span>
         ) : null}
       </div>
     </form>

@@ -33,7 +33,7 @@ export function PriceTable({
   return (
     <div>
       <table className="w-full text-sm">
-        <thead className="text-left text-zinc-500">
+        <thead className="text-left text-ink-500">
           <tr>
             <th className="py-1 font-normal">Size</th>
             <th className="py-1 font-normal">Price ₹</th>
@@ -45,7 +45,7 @@ export function PriceTable({
           {SIZES.map((size) => (
             <tr
               key={size.id}
-              className="border-t border-zinc-200/70 dark:border-zinc-800"
+              className="border-t border-paper-200/70"
             >
               <td className="py-2 font-medium">{size.label}</td>
               <td className="py-2 pr-3">
@@ -55,7 +55,7 @@ export function PriceTable({
                   name={`price.${size.id}`}
                   defaultValue={values[size.id] ?? ""}
                   placeholder={inherited[size.id]}
-                  className="w-28 rounded border border-zinc-300 bg-transparent px-2 py-1 tabular-nums dark:border-zinc-700"
+                  className="w-28 rounded border border-paper-300 bg-transparent px-2 py-1 tabular-nums"
                 />
               </td>
               <td className="py-2 pr-3">
@@ -65,11 +65,11 @@ export function PriceTable({
                   name={`compare.${size.id}`}
                   defaultValue={compareValues[size.id] ?? ""}
                   placeholder={inheritedCompare?.[size.id] ?? "—"}
-                  className="w-28 rounded border border-zinc-300 bg-transparent px-2 py-1 tabular-nums dark:border-zinc-700"
+                  className="w-28 rounded border border-paper-300 bg-transparent px-2 py-1 tabular-nums"
                 />
               </td>
               {origins ? (
-                <td className="py-2 text-xs text-zinc-500">
+                <td className="py-2 text-xs text-ink-500">
                   {origins[size.id]}
                 </td>
               ) : null}
@@ -77,8 +77,8 @@ export function PriceTable({
           ))}
         </tbody>
       </table>
-      <p className="mt-2 text-xs text-zinc-500">{emptyMeans}</p>
-      <p className="mt-1 text-xs text-zinc-500">
+      <p className="mt-2 text-xs text-ink-500">{emptyMeans}</p>
+      <p className="mt-1 text-xs text-ink-500">
         Compare-at only displays when it is higher than the price — a lower one
         would read as a price rise, so it is dropped.
       </p>

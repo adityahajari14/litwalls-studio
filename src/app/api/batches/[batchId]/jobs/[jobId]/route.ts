@@ -1,4 +1,10 @@
-import { readBatch, readJob, updateJob } from "@/lib/pipeline/store";
+import {
+  deleteJob,
+  readBatch,
+  readJob,
+  updateJob,
+  writeBatch,
+} from "@/lib/pipeline/store";
 import { normalizePriceTable } from "@/lib/print/pricing";
 import type { NormRect, PosterJob, SizeId } from "@/lib/print/types";
 
@@ -10,6 +16,41 @@ export async function GET(
   const job = await readJob(batchId, jobId);
   if (!job) return Response.json({ error: "Job not found." }, { status: 404 });
   return Response.json({ job });
+}
+
+/**
+ * Remove one poster from a batch.
+ *
+ * Deletes the job directory — original artwork, rendered files and all — and
+ * drops it from the batch's index. Nothing is removed from Shopify or Drive:
+ * a published product is a customer-facing thing, and deleting one silently
+ * because a local file was tidied up would be the wrong call.
+ */
+export async function DELETE(
+  _request: Request,
+  ctx: RouteContext<"/api/batches/[batchId]/jobs/[jobId]">,
+) {
+  const { batchId, jobId } = await ctx.params;
+
+  const [batch, job] = await Promise.all([
+    readBatch(batchId),
+    readJob(batchId, jobId),
+  ]);
+  if (!job) return Response.json({ error: "Job not found." }, { status: 404 });
+
+  await deleteJob(batchId, jobId);
+
+  if (batch) {
+    await writeBatch({
+      ...batch,
+      jobIds: batch.jobIds.filter((id) => id !== jobId),
+    });
+  }
+
+  return Response.json({
+    ok: true,
+    published: Boolean(job.shopify?.productId),
+  });
 }
 
 /**

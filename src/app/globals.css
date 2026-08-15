@@ -1,26 +1,100 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+/**
+ * Litwalls Studio design tokens.
+ *
+ * A warm neutral palette rather than pure grey: poster artwork is the subject
+ * of every screen here, and a cold blue-grey chrome fights the warm paper
+ * tones in the mockups. Everything is defined once, as a token, so a change
+ * lands everywhere rather than in the twelve places a colour was hardcoded.
+ */
+
+@theme {
+  /* Warm neutrals — the chrome. */
+  --color-paper-50: #fbfaf9;
+  --color-paper-100: #f5f3f0;
+  --color-paper-200: #e9e5e0;
+  --color-paper-300: #d6d0c8;
+  --color-paper-400: #a8a099;
+  --color-paper-500: #7d746c;
+  --color-paper-600: #5c544d;
+  --color-paper-700: #423b36;
+  --color-paper-800: #2a2521;
+  --color-paper-900: #1a1613;
+
+  /* Ink — ~AA or better on paper-50 for 600 and above. */
+  --color-ink-400: #8a827a;
+  --color-ink-500: #6b635b;
+  --color-ink-600: #4a433d;
+  --color-ink-700: #332d28;
+  --color-ink-900: #17130f;
+
+  /* One accent, used sparingly: primary actions and the current selection. */
+  --color-accent-50: #eef4ff;
+  --color-accent-100: #dbe7ff;
+  --color-accent-300: #9fbaff;
+  --color-accent-500: #3b6ef5;
+  --color-accent-600: #2d55d0;
+  --color-accent-700: #2544a8;
+
+  /* Status. Warning and danger are deliberately distinguishable without
+     relying on hue alone — every badge also carries a word. */
+  --color-ok-50: #ecfdf3;
+  --color-ok-500: #12a150;
+  --color-ok-700: #0a6b35;
+  --color-warn-50: #fff8eb;
+  --color-warn-500: #d68b0b;
+  --color-warn-700: #96610a;
+  --color-danger-50: #fef2f2;
+  --color-danger-500: #dc3545;
+  --color-danger-700: #a32330;
+
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+
+  --radius-card: 0.625rem;
+
+  /* Soft, low-contrast elevation — a tool, not a toy. */
+  --shadow-card: 0 1px 2px rgb(23 19 15 / 0.04), 0 1px 3px rgb(23 19 15 / 0.06);
+  --shadow-pop: 0 4px 12px rgb(23 19 15 / 0.08), 0 2px 4px rgb(23 19 15 / 0.04);
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html {
+  /* Scrollbar gutter reserved so navigating between a short page and a long
+     one does not shift the whole layout sideways. */
+  scrollbar-gutter: stable;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--color-paper-50);
+  color: var(--color-ink-700);
+  /* Was Arial — the create-next-app default that never got replaced, which is
+     most of why this looked unfinished. */
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Numbers in tables and prices line up only if they are tabular. */
+.tnum {
+  font-variant-numeric: tabular-nums;
+}
+
+/* A consistent, visible focus ring. Keyboard shortcuts are a first-class way
+   to drive the review screen, so focus must never be invisible. */
+:where(a, button, input, select, textarea, [tabindex]):focus-visible {
+  outline: 2px solid var(--color-accent-500);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Checkerboard behind transparent artwork, so a PNG with an alpha channel
+   reads as transparent rather than white. */
+.checkerboard {
+  background-image:
+    linear-gradient(45deg, var(--color-paper-200) 25%, transparent 25%),
+    linear-gradient(-45deg, var(--color-paper-200) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, var(--color-paper-200) 75%),
+    linear-gradient(-45deg, transparent 75%, var(--color-paper-200) 75%);
+  background-size: 16px 16px;
+  background-position: 0 0, 0 8px, 8px -8px, -8px 0;
 }

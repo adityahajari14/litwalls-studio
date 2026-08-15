@@ -1,10 +1,23 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import { CropEditor } from "@/components/crop-editor";
+import { GalleryEditor, type LibraryOption } from "@/components/gallery-editor";
 import { PriceTable } from "@/components/price-table";
+import {
+  Badge,
+  BackLink,
+  Button,
+  Card,
+  Field,
+  Input,
+  PageHeader,
+  Section,
+  Segmented,
+  Textarea,
+} from "@/components/ui";
 import { SIZES } from "@/lib/print/sizes";
 import { CATEGORY_TAG, formatTitle } from "@/lib/print/title";
 import type { PartialPriceTable, PriceTable as Prices } from "@/lib/print/pricing";
@@ -12,6 +25,7 @@ import type {
   Batch,
   NormRect,
   PosterJob,
+  ProductImageRef,
   SizeId,
 } from "@/lib/print/types";
 
@@ -21,12 +35,21 @@ export function ReviewScreen({
   inheritedPrices,
   inheritedCompare,
   templates,
+  library,
+  position,
 }: {
   batch: Batch;
   job: PosterJob;
   inheritedPrices: Prices;
   inheritedCompare: PartialPriceTable;
   templates: { id: string; name: string }[];
+  library: LibraryOption[];
+  position: {
+    index: number;
+    total: number;
+    prevId: string | null;
+    nextId: string | null;
+  };
 }) {
   const router = useRouter();
   const [job, setJob] = useState(initialJob);
@@ -34,8 +57,8 @@ export function ReviewScreen({
   const [busy, setBusy] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
-  // Local edits, applied on save. Kept separate from `job` so an unsaved crop
-  // drag does not look persisted when it is not.
+  // Local edits, applied on save. Kept apart from `job` so an unsaved crop
+  // drag never looks persisted when it is not.
   const [crops, setCrops] = useState(job.cropOverrides);
   const [subject, setSubject] = useState(job.metadata?.subject ?? "");
   const [subtitle, setSubtitle] = useState(job.metadata?.subtitle ?? "");
@@ -46,70 +69,79 @@ export function ReviewScreen({
       ? job.selectedTemplateIds
       : job.mockups.map((m) => m.templateId),
   );
+  // Default the gallery to every rendered mockup, so a poster nobody curates
+  // still publishes with proper images rather than none.
+  const [images, setImages] = useState<ProductImageRef[]>(
+    job.images.length > 0
+      ? job.images
+      : job.mockups.map((m) => ({
+          kind: "mockup" as const,
+          templateId: m.templateId,
+        })),
+  );
 
-  const asset = (relPath: string) =>
-    `/api/assets/${job.batchId}/${job.id}/${relPath}`;
-  const masterUrl = asset("master.png");
+  const assetUrl = useCallback(
+    (relPath: string) => `/api/assets/${job.batchId}/${job.id}/${relPath}`,
+    [job.batchId, job.id],
+  );
 
   const source = job.probe
     ? { width: job.probe.width, height: job.probe.height }
     : { width: 1000, height: 1400 };
 
-  async function patch(body: Record<string, unknown>, label: string) {
-    setBusy(label);
-    setMessage(null);
-    try {
-      const response = await fetch(
-        `/api/batches/${job.batchId}/jobs/${job.id}`,
-        {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body),
-        },
-      );
-      const result = await response.json();
-      if (!response.ok) {
-        setMessage(result.error ?? "Save failed.");
-        return null;
-      }
-      setJob(result.job);
-      return result.job as PosterJob;
-    } catch (cause) {
-      setMessage(cause instanceof Error ? cause.message : String(cause));
-      return null;
-    } finally {
-      setBusy(null);
-    }
-  }
-
-  async function save() {
-    const saved = await patch(
-      {
-        metadata: {
-          subject,
-          subtitle,
-          tags: tags
-            .split(",")
-            .map((t) => t.trim())
-            .filter(Boolean),
-          altText,
-        },
-        cropOverrides: crops,
-        selectedTemplateIds: selected,
+  const body = useCallback(
+    () => ({
+      metadata: {
+        subject,
+        subtitle,
+        tags: tags.split(",").map((t) => t.trim()).filter(Boolean),
+        altText,
       },
-      "save",
-    );
-    if (saved) setMessage("Saved.");
-  }
+      cropOverrides: crops,
+      selectedTemplateIds: selected,
+      images,
+    }),
+    [subject, subtitle, tags, altText, crops, selected, images],
+  );
+
+  const patch = useCallback(
+    async (payload: Record<string, unknown>, label: string) => {
+      setBusy(label);
+      setMessage(null);
+      try {
+        const response = await fetch(
+          `/api/batches/${job.batchId}/jobs/${job.id}`,
+          {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          },
+        );
+        const result = await response.json();
+        if (!response.ok) {
+          setMessage(result.error ?? "Save failed.");
+          return null;
+        }
+        setJob(result.job);
+        return result.job as PosterJob;
+      } catch (cause) {
+        setMessage(cause instanceof Error ? cause.message : String(cause));
+        return null;
+      } finally {
+        setBusy(null);
+      }
+    },
+    [job.batchId, job.id],
+  );
+
+  const save = useCallback(async () => {
+    if (await patch(body(), "save")) setMessage("Saved");
+  }, [patch, body]);
 
   async function rerender() {
-    // Saved first: re-rendering reads the job from disk, so unsaved crop
-    // changes would otherwise be silently ignored.
-    const saved = await patch(
-      { cropOverrides: crops, selectedTemplateIds: selected },
-      "rerender",
-    );
-    if (!saved) return;
+    // Saved first: re-render reads the job from disk, so unsaved crop changes
+    // would otherwise be silently ignored.
+    if (!(await patch(body(), "rerender"))) return;
 
     setBusy("rerender");
     try {
@@ -118,38 +150,33 @@ export function ReviewScreen({
         { method: "POST" },
       );
       const result = await response.json();
-      if (!response.ok) {
-        setMessage(result.error ?? "Re-render failed.");
-        return;
+      if (!response.ok) setMessage(result.error ?? "Re-render failed.");
+      else {
+        setJob(result.job);
+        setMessage("Re-rendered");
       }
-      setJob(result.job);
-      setMessage("Re-rendered.");
     } finally {
       setBusy(null);
     }
   }
 
-  async function approve() {
-    const saved = await patch({ approved: true }, "approve");
-    if (saved) router.push(`/batches/${job.batchId}`);
-  }
+  const go = useCallback(
+    (id: string | null) => {
+      if (id) router.push(`/batches/${job.batchId}/jobs/${id}`);
+    },
+    [router, job.batchId],
+  );
+
+  const approve = useCallback(async () => {
+    if (!(await patch({ ...body(), approved: true }, "approve"))) return;
+    // Straight on to the next poster: approving twenty in a row should not
+    // mean twenty round trips through the batch list.
+    if (position.nextId) go(position.nextId);
+    else router.push(`/batches/${job.batchId}`);
+  }, [patch, body, position.nextId, go, router, job.batchId]);
 
   async function fileToDrive() {
-    // Saved first: the Drive folder is named from the subject, which is read
-    // from disk rather than from this form's unsaved state.
-    const saved = await patch(
-      {
-        metadata: {
-          subject,
-          subtitle,
-          tags: tags.split(",").map((t) => t.trim()).filter(Boolean),
-          altText,
-        },
-      },
-      "drive",
-    );
-    if (!saved) return;
-
+    if (!(await patch(body(), "drive"))) return;
     setBusy("drive");
     try {
       const response = await fetch(
@@ -157,18 +184,62 @@ export function ReviewScreen({
         { method: "POST" },
       );
       const result = await response.json();
-      if (!response.ok) {
-        setMessage(result.error ?? "Drive upload failed.");
-        return;
+      if (!response.ok) setMessage(result.error ?? "Drive upload failed.");
+      else {
+        setJob(result.job);
+        setMessage(`Filed ${result.files} files to Drive`);
       }
-      setJob(result.job);
-      setMessage(`Filed ${result.files} files to Drive.`);
-    } catch (cause) {
-      setMessage(cause instanceof Error ? cause.message : String(cause));
     } finally {
       setBusy(null);
     }
   }
+
+  async function remove() {
+    if (
+      !confirm(
+        `Remove "${job.sourceName}" from this batch?\n\nDeletes the local files. Anything already published to Shopify or filed to Drive stays where it is.`,
+      )
+    ) {
+      return;
+    }
+    setBusy("delete");
+    await fetch(`/api/batches/${job.batchId}/jobs/${job.id}`, {
+      method: "DELETE",
+    });
+    router.push(`/batches/${job.batchId}`);
+  }
+
+  /**
+   * Keyboard shortcuts. Reviewing a batch is a repetitive two-key job —
+   * glance, approve, next — and reaching for the mouse each time is most of
+   * the effort.
+   */
+  useEffect(() => {
+    function onKey(event: KeyboardEvent) {
+      const target = event.target as HTMLElement | null;
+      // Never hijack a key while someone is typing into a field.
+      if (
+        target &&
+        (target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.isContentEditable)
+      ) {
+        return;
+      }
+      if (event.metaKey || event.ctrlKey || event.altKey) return;
+
+      if (event.key === "j" || event.key === "ArrowRight") go(position.nextId);
+      else if (event.key === "k" || event.key === "ArrowLeft") go(position.prevId);
+      else if (event.key === "a") void approve();
+      else if (event.key === "s") void save();
+      else return;
+
+      event.preventDefault();
+    }
+
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [go, position.nextId, position.prevId, approve, save]);
 
   const previewTitle = subject
     ? formatTitle(
@@ -177,183 +248,207 @@ export function ReviewScreen({
       )
     : "—";
 
-  const sizeAssets = job.assets.filter((a) => a.sizeId === sizeId);
-  const lowRes = sizeAssets.some((a) => a.lowRes);
+  const lowRes = job.assets.some((a) => a.sizeId === sizeId && a.lowRes);
+  const published = Boolean(job.shopify?.productId);
 
   return (
-    <div className="mt-4">
-      <div className="flex flex-wrap items-baseline justify-between gap-3">
-        <h1 className="text-xl font-semibold tracking-tight">
-          {job.sourceName}
-        </h1>
-        <span className="flex gap-1.5 text-[11px]">
-          {job.metadata?.source === "fallback" ? (
-            <Pill tone="warn">no AI — check the title</Pill>
-          ) : null}
-          {job.probe?.upscaled ? <Pill tone="warn">upscaled</Pill> : null}
-          {job.probe && job.probe.coverage < 0.5 ? (
-            <Pill tone="warn">
-              {Math.round(job.probe.coverage * 100)}% of artwork used
-            </Pill>
-          ) : null}
-        </span>
-      </div>
-
-      <div className="mt-6 grid gap-8 lg:grid-cols-[minmax(0,1fr)_360px]">
-        {/* ── Left: crop and mockups ─────────────────────────────────── */}
-        <div>
-          <div className="flex flex-wrap items-center gap-2">
-            {SIZES.map((size) => (
-              <button
-                key={size.id}
-                onClick={() => setSizeId(size.id)}
-                className={`rounded border px-2.5 py-1 text-xs ${
-                  sizeId === size.id
-                    ? "border-zinc-900 bg-zinc-900 text-white dark:border-zinc-100 dark:bg-zinc-100 dark:text-zinc-900"
-                    : "border-zinc-300 dark:border-zinc-700"
-                }`}
-              >
-                {size.label}
-              </button>
-            ))}
-            {crops[sizeId] ? (
-              <button
-                onClick={() => {
-                  const next = { ...crops };
-                  delete next[sizeId];
-                  setCrops(next);
-                }}
-                className="text-xs text-zinc-500 underline underline-offset-4"
-              >
-                Reset to auto
-              </button>
+    <main className="mx-auto w-full max-w-7xl px-6 py-8">
+      <PageHeader
+        eyebrow={<BackLink href={`/batches/${job.batchId}`}>{batch.name}</BackLink>}
+        title={job.metadata?.subject || job.sourceName}
+        meta={
+          <>
+            <span className="truncate text-ink-400">{job.sourceName}</span>
+            {job.metadata?.source === "fallback" ? (
+              <Badge tone="warn">AI unavailable — check the title</Badge>
             ) : null}
-            {lowRes ? (
-              <span className="text-xs text-red-600 dark:text-red-400">
-                below 250dpi at this size
+            {job.probe?.upscaled ? <Badge tone="warn">upscaled</Badge> : null}
+            {job.probe && job.probe.coverage < 0.5 ? (
+              <Badge tone="warn">
+                {Math.round(job.probe.coverage * 100)}% of artwork used
+              </Badge>
+            ) : null}
+            {published ? <Badge tone="ok">published</Badge> : null}
+            {job.drive ? <Badge tone="ok">on Drive</Badge> : null}
+          </>
+        }
+        actions={
+          <>
+            {position.total > 1 ? (
+              <span className="flex items-center gap-1">
+                <Button
+                  size="sm"
+                  onClick={() => go(position.prevId)}
+                  disabled={!position.prevId}
+                  title="Previous (K)"
+                >
+                  ←
+                </Button>
+                <span className="tnum px-1 text-xs text-ink-400">
+                  {position.index + 1} / {position.total}
+                </span>
+                <Button
+                  size="sm"
+                  onClick={() => go(position.nextId)}
+                  disabled={!position.nextId}
+                  title="Next (J)"
+                >
+                  →
+                </Button>
               </span>
             ) : null}
-          </div>
+            <Button variant="danger" size="sm" onClick={remove} disabled={busy !== null}>
+              Delete
+            </Button>
+          </>
+        }
+      />
 
-          <div className="mt-3">
-            <CropEditor
-              imageUrl={masterUrl}
-              source={source}
-              sizeId={sizeId}
-              kind={job.kind}
-              focal={job.focal}
-              value={crops[sizeId] ?? null}
-              onChange={(rect: NormRect) =>
-                setCrops({ ...crops, [sizeId]: rect })
-              }
-            />
-            <p className="mt-2 text-xs text-zinc-500">
-              Drag to reposition. The box is locked to this size&rsquo;s aspect
+      <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1fr)_380px]">
+        {/* ── Left: crop and mockups ──────────────────────────────────── */}
+        <div className="space-y-6">
+          <Section
+            title="Crop"
+            action={
+              <span className="flex items-center gap-2">
+                {lowRes ? <Badge tone="danger">below 250dpi</Badge> : null}
+                {crops[sizeId] ? (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => {
+                      const next = { ...crops };
+                      delete next[sizeId];
+                      setCrops(next);
+                    }}
+                  >
+                    Reset to auto
+                  </Button>
+                ) : null}
+                <Segmented
+                  size="sm"
+                  value={sizeId}
+                  onChange={setSizeId}
+                  options={SIZES.map((s) => ({ value: s.id, label: s.label }))}
+                />
+              </span>
+            }
+          >
+            <Card className="overflow-hidden p-2">
+              <CropEditor
+                imageUrl={assetUrl("master.png")}
+                source={source}
+                sizeId={sizeId}
+                kind={job.kind}
+                focal={job.focal}
+                value={crops[sizeId] ?? null}
+                onChange={(rect: NormRect) =>
+                  setCrops({ ...crops, [sizeId]: rect })
+                }
+              />
+            </Card>
+            <p className="mt-2 text-xs text-ink-400">
+              Drag to reposition; the box is locked to this size&rsquo;s aspect
               ratio.
               {job.kind === "split3"
-                ? " Vertical lines show where the panels divide."
+                ? " Vertical lines mark where the three panels divide."
                 : ""}
               {job.focal?.source === "gemini"
                 ? " The dashed box is what the model identified as the subject."
                 : ""}
             </p>
-          </div>
+          </Section>
 
           {job.mockups.length > 0 ? (
-            <div className="mt-6">
-              <h2 className="text-xs font-medium uppercase tracking-widest text-zinc-500">
-                Mockups
-              </h2>
-              <div className="mt-2 grid grid-cols-2 gap-3">
+            <Section title="Mockups">
+              <div className="grid grid-cols-2 gap-3">
                 {job.mockups.map((mockup) => (
-                  <figure key={mockup.templateId}>
+                  <Card key={mockup.templateId} className="overflow-hidden">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
-                      src={asset(mockup.relPath)}
+                      src={assetUrl(mockup.relPath)}
                       alt={mockup.templateId}
-                      className="w-full rounded border border-zinc-200 dark:border-zinc-800"
+                      className="w-full"
                     />
-                    <figcaption className="mt-1 text-[11px] text-zinc-500">
+                    <p className="truncate px-2.5 py-1.5 text-xs text-ink-400">
                       {mockup.templateId}
-                    </figcaption>
-                  </figure>
+                    </p>
+                  </Card>
                 ))}
               </div>
-            </div>
+            </Section>
           ) : null}
         </div>
 
-        {/* ── Right: metadata, prices, actions ───────────────────────── */}
+        {/* ── Right: metadata, gallery, prices ────────────────────────── */}
         <div className="space-y-6">
-          <section>
-            <h2 className="text-xs font-medium uppercase tracking-widest text-zinc-500">
-              Title
-            </h2>
-            <label className="mt-2 block text-xs text-zinc-500">
-              Subject
-              <input
-                value={subject}
-                onChange={(e) => setSubject(e.target.value)}
-                className="mt-1 w-full rounded border border-zinc-300 bg-transparent px-2 py-1.5 text-sm text-zinc-900 dark:border-zinc-700 dark:text-zinc-100"
-              />
-            </label>
-            <label className="mt-2 block text-xs text-zinc-500">
-              Subtitle (optional)
-              <input
-                value={subtitle}
-                onChange={(e) => setSubtitle(e.target.value)}
-                placeholder="e.g. Star Boy"
-                className="mt-1 w-full rounded border border-zinc-300 bg-transparent px-2 py-1.5 text-sm text-zinc-900 dark:border-zinc-700 dark:text-zinc-100"
-              />
-            </label>
-            <p className="mt-2 rounded bg-zinc-100 px-2 py-1.5 text-xs dark:bg-zinc-900">
-              {previewTitle}
-            </p>
-            <p className="mt-1 text-[11px] text-zinc-500">
-              The number is assigned at publish, from the live catalogue — the
-              one shown here is a placeholder.
-            </p>
-          </section>
+          <Section title="Product title">
+            <div className="space-y-2.5">
+              <Field label="Subject">
+                <Input
+                  value={subject}
+                  onChange={(e) => setSubject(e.target.value)}
+                  placeholder="Spider Man"
+                />
+              </Field>
+              <Field
+                label="Subtitle"
+                hint="Only for a specific album or storyline. Usually blank."
+              >
+                <Input
+                  value={subtitle}
+                  onChange={(e) => setSubtitle(e.target.value)}
+                  placeholder="Star Boy"
+                />
+              </Field>
+              <div className="rounded-md bg-paper-100 px-2.5 py-2">
+                <p className="text-sm font-medium text-ink-900">{previewTitle}</p>
+                <p className="mt-0.5 text-[11px] text-ink-400">
+                  The number is assigned at publish from the live catalogue.
+                </p>
+              </div>
+            </div>
+          </Section>
 
-          <section>
-            <h2 className="text-xs font-medium uppercase tracking-widest text-zinc-500">
-              Tags
-            </h2>
-            <input
+          <Section title="Tags">
+            <Input
               value={tags}
               onChange={(e) => setTags(e.target.value)}
-              placeholder="Marvel, Spider Man"
-              className="mt-2 w-full rounded border border-zinc-300 bg-transparent px-2 py-1.5 text-sm dark:border-zinc-700"
+              placeholder="Spider Man, Movies"
             />
-            <p className="mt-1 text-[11px] text-zinc-500">
-              <code>{CATEGORY_TAG[batch.category]}</code> is added
-              automatically — it is what puts this in the collection.
+            <p className="mt-1 text-xs text-ink-400">
+              <code className="font-mono">{CATEGORY_TAG[batch.category]}</code>{" "}
+              is added automatically — it is what puts this in the collection.
             </p>
-          </section>
+          </Section>
 
-          <section>
-            <h2 className="text-xs font-medium uppercase tracking-widest text-zinc-500">
-              Alt text
-            </h2>
-            <textarea
+          <Section title="Alt text">
+            <Textarea
               value={altText}
               onChange={(e) => setAltText(e.target.value)}
               rows={2}
               maxLength={125}
-              className="mt-2 w-full rounded border border-zinc-300 bg-transparent px-2 py-1.5 text-sm dark:border-zinc-700"
+              placeholder="Spider-Man swinging between skyscrapers at sunset"
             />
-          </section>
+          </Section>
+
+          <Section title="Product images">
+            <GalleryEditor
+              mockups={job.mockups}
+              library={library}
+              value={images}
+              onChange={setImages}
+              assetUrl={assetUrl}
+            />
+          </Section>
 
           {templates.length > 0 ? (
-            <section>
-              <h2 className="text-xs font-medium uppercase tracking-widest text-zinc-500">
-                Mockup templates
-              </h2>
-              <div className="mt-2 space-y-1">
+            <Section title="Render with">
+              <div className="space-y-1">
                 {templates.map((template) => (
                   <label
                     key={template.id}
-                    className="flex cursor-pointer items-center gap-2 text-sm"
+                    className="flex cursor-pointer items-center gap-2 text-sm text-ink-600"
                   >
                     <input
                       type="checkbox"
@@ -365,87 +460,63 @@ export function ReviewScreen({
                             : selected.filter((id) => id !== template.id),
                         )
                       }
+                      className="accent-[var(--color-accent-600)]"
                     />
                     {template.name}
                   </label>
                 ))}
               </div>
-            </section>
+            </Section>
           ) : null}
 
-          <section>
-            <h2 className="text-xs font-medium uppercase tracking-widest text-zinc-500">
-              Prices for this poster
-            </h2>
-            <div className="mt-2">
-              <PriceTable
-                values={job.priceOverrides}
-                compareValues={job.compareAtOverrides}
-                inherited={inheritedPrices}
-                inheritedCompare={inheritedCompare}
-                emptyMeans="Blank uses the batch or dashboard price shown in grey."
-              />
-            </div>
-          </section>
-
-          <div className="flex flex-wrap items-center gap-2 border-t border-zinc-200 pt-4 dark:border-zinc-800">
-            <button
-              onClick={save}
-              disabled={busy !== null}
-              className="rounded border border-zinc-300 px-3 py-1.5 text-sm disabled:opacity-50 dark:border-zinc-700"
-            >
-              {busy === "save" ? "Saving…" : "Save"}
-            </button>
-            <button
-              onClick={rerender}
-              disabled={busy !== null}
-              className="rounded border border-zinc-300 px-3 py-1.5 text-sm disabled:opacity-50 dark:border-zinc-700"
-            >
-              {busy === "rerender" ? "Rendering…" : "Save & re-render"}
-            </button>
-            <button
-              onClick={fileToDrive}
-              disabled={busy !== null}
-              className="rounded border border-zinc-300 px-3 py-1.5 text-sm disabled:opacity-50 dark:border-zinc-700"
-              title="Upload the print-ready files and the original to Google Drive"
-            >
-              {busy === "drive"
-                ? "Uploading…"
-                : job.drive
-                  ? "Re-file to Drive"
-                  : "File to Drive"}
-            </button>
-            <button
-              onClick={approve}
-              disabled={busy !== null}
-              className="rounded bg-zinc-900 px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900"
-            >
-              Approve
-            </button>
-            {message ? (
-              <span className="text-xs text-zinc-500">{message}</span>
-            ) : null}
-          </div>
+          <Section title="Prices">
+            <PriceTable
+              values={job.priceOverrides}
+              compareValues={job.compareAtOverrides}
+              inherited={inheritedPrices}
+              inheritedCompare={inheritedCompare}
+              emptyMeans="Blank uses the batch or dashboard price shown in grey."
+            />
+          </Section>
         </div>
       </div>
-    </div>
-  );
-}
 
-function Pill({
-  children,
-  tone,
-}: {
-  children: React.ReactNode;
-  tone: "warn" | "bad";
-}) {
-  const tones = {
-    warn: "border-amber-400 text-amber-700 dark:border-amber-700 dark:text-amber-400",
-    bad: "border-red-400 text-red-700 dark:border-red-800 dark:text-red-400",
-  };
-  return (
-    <span className={`rounded-full border px-1.5 py-0.5 ${tones[tone]}`}>
-      {children}
-    </span>
+      {/* Sticky action bar: approving is the whole point of this screen, so it
+          must never be scrolled off. */}
+      <div className="sticky bottom-0 mt-8 -mx-6 border-t border-paper-200 bg-paper-50/90 px-6 py-3 backdrop-blur">
+        <div className="flex flex-wrap items-center gap-2">
+          <Button onClick={save} disabled={busy !== null}>
+            {busy === "save" ? "Saving…" : "Save"}
+          </Button>
+          <Button onClick={rerender} disabled={busy !== null}>
+            {busy === "rerender" ? "Rendering…" : "Save & re-render"}
+          </Button>
+          <Button onClick={fileToDrive} disabled={busy !== null}>
+            {busy === "drive" ? "Filing…" : job.drive ? "Re-file to Drive" : "File to Drive"}
+          </Button>
+
+          <Button
+            variant="primary"
+            onClick={approve}
+            disabled={busy !== null}
+            className="ml-auto"
+          >
+            {busy === "approve"
+              ? "Approving…"
+              : position.nextId
+                ? "Approve & next"
+                : "Approve"}
+          </Button>
+
+          {message ? (
+            <span className="w-full text-xs text-ink-500 sm:w-auto">{message}</span>
+          ) : (
+            <span className="hidden text-[11px] text-ink-400 sm:inline">
+              J / K to move · A to approve · S to save
+            </span>
+          )}
+        </div>
+      </div>
+    </main>
   );
 }

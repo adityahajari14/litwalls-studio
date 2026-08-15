@@ -1,8 +1,8 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { ReviewScreen } from "@/app/batches/[batchId]/jobs/[jobId]/review-screen";
-import { readBatch, readJob } from "@/lib/pipeline/store";
+import { loadLibrary } from "@/lib/library/load";
+import { listJobs, readBatch, readJob } from "@/lib/pipeline/store";
 import { readSettings } from "@/lib/pipeline/settings";
 import { resolvePriceTable } from "@/lib/print/pricing";
 import { usableTemplates } from "@/lib/templates/load";
@@ -18,9 +18,11 @@ export default async function JobPage(
   ]);
   if (!batch || !job) notFound();
 
-  const [settings, templates] = await Promise.all([
+  const [settings, templates, library, siblings] = await Promise.all([
     readSettings(),
     usableTemplates(),
+    loadLibrary(),
+    listJobs(batchId),
   ]);
 
   // What this poster would publish at with no per-poster override — shown as
@@ -30,22 +32,32 @@ export default async function JobPage(
     settings: settings.prices,
   });
 
-  return (
-    <main className="mx-auto w-full max-w-6xl px-6 py-10">
-      <Link
-        href={`/batches/${batchId}`}
-        className="text-sm text-zinc-500 underline-offset-4 hover:underline"
-      >
-        ← {batch.name}
-      </Link>
+  // Only posters that have something to review can be stepped through, so
+  // prev/next never lands on a blank screen.
+  const reviewable = siblings.filter((sibling) => sibling.assets.length > 0);
+  const index = reviewable.findIndex((sibling) => sibling.id === jobId);
 
-      <ReviewScreen
-        batch={batch}
-        job={job}
-        inheritedPrices={inherited}
-        inheritedCompare={{ ...settings.compareAt, ...batch.compareAt }}
-        templates={templates.map((t) => ({ id: t.id, name: t.name }))}
-      />
-    </main>
+  return (
+    <ReviewScreen
+      batch={batch}
+      job={job}
+      inheritedPrices={inherited}
+      inheritedCompare={{ ...settings.compareAt, ...batch.compareAt }}
+      templates={templates.map((t) => ({ id: t.id, name: t.name }))}
+      library={library.map((image) => ({
+        id: image.id,
+        name: image.name,
+        role: image.role,
+      }))}
+      position={{
+        index,
+        total: reviewable.length,
+        prevId: index > 0 ? reviewable[index - 1].id : null,
+        nextId:
+          index >= 0 && index < reviewable.length - 1
+            ? reviewable[index + 1].id
+            : null,
+      }}
+    />
   );
 }

@@ -98,8 +98,15 @@ export function CropEditor({
   return (
     <div
       ref={containerRef}
-      className="relative select-none overflow-hidden rounded border border-zinc-300 dark:border-zinc-700"
-      style={{ aspectRatio: `${source.width} / ${source.height}` }}
+      className="relative mx-auto select-none overflow-hidden rounded border border-paper-300"
+      style={{
+        aspectRatio: `${source.width} / ${source.height}`,
+        // Capped so a tall poster still fits on screen beside the form. Without
+        // this a 3600x5000 source rendered taller than the viewport, and you
+        // could not see the crop box and the controls at the same time — which
+        // is the entire point of the screen.
+        maxHeight: "min(62vh, 560px)",
+      }}
     >
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img

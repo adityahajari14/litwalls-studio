@@ -56,12 +56,12 @@ export function PublishButton({ batchId }: { batchId: string }) {
   }
 
   return (
-    <div className="mt-4 rounded border border-zinc-200 p-3 dark:border-zinc-800">
+    <div className="mt-4 rounded border border-paper-200 p-3">
       <div className="flex flex-wrap items-center gap-3">
         <button
           onClick={publish}
           disabled={pending}
-          className="rounded bg-zinc-900 px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900"
+          className="rounded bg-ink-900 px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50"
         >
           {pending ? "Publishing…" : "Publish approved to Shopify"}
         </button>
@@ -76,14 +76,14 @@ export function PublishButton({ batchId }: { batchId: string }) {
         </label>
 
         {result ? (
-          <span className="text-xs text-zinc-600 dark:text-zinc-400">
+          <span className="text-xs text-ink-600">
             {result}
           </span>
         ) : null}
       </div>
 
       {live ? (
-        <p className="mt-2 text-xs text-amber-700 dark:text-amber-400">
+        <p className="mt-2 text-xs text-amber-700">
           The storefront does not handle size variants yet — a live product will
           sell A5 whichever size a customer chooses. Keep this off until the
           storefront work is done.
@@ -91,7 +91,7 @@ export function PublishButton({ batchId }: { batchId: string }) {
       ) : null}
 
       {errors.length > 0 ? (
-        <ul className="mt-2 space-y-0.5 text-xs text-red-600 dark:text-red-400">
+        <ul className="mt-2 space-y-0.5 text-xs text-danger-700">
           {errors.map((error) => (
             <li key={error}>{error}</li>
           ))}

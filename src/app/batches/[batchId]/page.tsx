@@ -1,10 +1,10 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { DropZone } from "@/app/batches/[batchId]/drop-zone";
-import { JobList } from "@/components/job-list";
+import { JobGrid } from "@/components/job-grid";
 import { PublishButton } from "@/components/publish-button";
 import { RunButton } from "@/components/run-button";
+import { Badge, BackLink, PageHeader, Section } from "@/components/ui";
 import { hasReached } from "@/lib/print/types";
 import { listJobs, readBatch } from "@/lib/pipeline/store";
 import { resolvePriceTable } from "@/lib/print/pricing";
@@ -25,56 +25,53 @@ export default async function BatchPage(
     readSettings(),
   ]);
 
-  // The prices this batch will actually publish at, with the batch's own
-  // overrides on top of the dashboard defaults.
+  // What this batch will actually publish at: its own overrides on top of the
+  // dashboard defaults.
   const prices = resolvePriceTable({
     batch: batch.prices,
     settings: settings.prices,
   });
 
-  return (
-    <main className="mx-auto w-full max-w-4xl px-6 py-16">
-      <Link
-        href="/"
-        className="text-sm text-zinc-500 underline-offset-4 hover:underline"
-      >
-        ← Dashboard
-      </Link>
+  const unprocessed = jobs.filter((job) => !hasReached(job.stage, "mocked"));
+  const approved = jobs.filter(
+    (job) => job.stage === "approved" || job.stage === "published",
+  );
 
-      <div className="mt-4 flex flex-wrap items-baseline justify-between gap-3">
-        <h1 className="text-2xl font-semibold tracking-tight">{batch.name}</h1>
-        <div className="flex gap-2 text-xs text-zinc-500">
-          <span className="rounded-full border border-zinc-300 px-2 py-0.5 dark:border-zinc-700">
-            {CATEGORY_LABEL[batch.category]}
-          </span>
-          <span className="rounded-full border border-zinc-300 px-2 py-0.5 dark:border-zinc-700">
-            {batch.kind === "split3" ? "Split — 3 panels" : "Normal"}
-          </span>
-        </div>
+  return (
+    <main className="mx-auto w-full max-w-6xl px-6 py-8">
+      <PageHeader
+        eyebrow={<BackLink href="/">All batches</BackLink>}
+        title={batch.name}
+        meta={
+          <>
+            <Badge>{CATEGORY_LABEL[batch.category]}</Badge>
+            <Badge>
+              {batch.kind === "split3" ? "Split — 3 panels" : "Single sheet"}
+            </Badge>
+            <span className="tnum text-ink-400">
+              {SIZES.map((size) => `${size.label} ₹${prices[size.id]}`).join(
+                " · ",
+              )}
+            </span>
+          </>
+        }
+        actions={
+          <>
+            {unprocessed.length > 0 ? (
+              <RunButton batchId={batch.id} pending={unprocessed.length} />
+            ) : null}
+            {approved.length > 0 ? <PublishButton batchId={batch.id} /> : null}
+          </>
+        }
+      />
+
+      <div className="mt-6">
+        <DropZone batchId={batch.id} initialCount={jobs.length} />
       </div>
 
-      <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
-        {SIZES.map((size) => `${size.label} ₹${prices[size.id]}`).join("  ·  ")}
-      </p>
-
-      <section className="mt-10">
-        <DropZone batchId={batch.id} initialCount={jobs.length} />
-      </section>
-
-      <section className="mt-10">
-        <div className="flex items-baseline justify-between">
-          <h2 className="text-xs font-medium uppercase tracking-widest text-zinc-500">
-            Posters ({jobs.length})
-          </h2>
-          {jobs.length > 0 ? <RunButton batchId={batch.id} /> : null}
-        </div>
-
-        <JobList batchId={batch.id} initialJobs={jobs} />
-
-        {jobs.some((job) => hasReached(job.stage, "approved")) ? (
-          <PublishButton batchId={batch.id} />
-        ) : null}
-      </section>
+      <Section title="Posters" className="mt-8">
+        <JobGrid batchId={batch.id} initialJobs={jobs} />
+      </Section>
     </main>
   );
 }

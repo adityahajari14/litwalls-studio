@@ -59,15 +59,15 @@ export function CornerPicker({ templateId }: { templateId: string }) {
               }}
               className={`rounded border px-2 py-1 ${
                 mode === value
-                  ? "border-zinc-900 bg-zinc-900 text-white dark:border-zinc-100 dark:bg-zinc-100 dark:text-zinc-900"
-                  : "border-zinc-300 dark:border-zinc-700"
+                  ? "border-ink-900 bg-ink-900 text-white"
+                  : "border-paper-300"
               }`}
             >
               {value}
             </button>
           ))}
         </div>
-        <p className="text-xs text-zinc-500">
+        <p className="text-xs text-ink-500">
           {points.length < 4
             ? `Click the ${LABELS[points.length]} corner of the wall area`
             : "All four corners set"}
@@ -79,7 +79,7 @@ export function CornerPicker({ templateId }: { templateId: string }) {
               setPoints([]);
               setCopied(false);
             }}
-            className="text-xs text-zinc-500 underline underline-offset-4"
+            className="text-xs text-ink-500 underline underline-offset-4"
           >
             Reset
           </button>
@@ -99,7 +99,7 @@ export function CornerPicker({ templateId }: { templateId: string }) {
               height: event.currentTarget.naturalHeight,
             })
           }
-          className="max-h-[420px] w-auto cursor-crosshair rounded border border-zinc-300 dark:border-zinc-700"
+          className="max-h-[420px] w-auto cursor-crosshair rounded border border-paper-300"
         />
         {natural
           ? points.map((point, index) => (
@@ -120,11 +120,11 @@ export function CornerPicker({ templateId }: { templateId: string }) {
       {json ? (
         <div className="mt-3">
           {check && !check.ok ? (
-            <p className="mb-2 text-xs text-amber-700 dark:text-amber-400">
+            <p className="mb-2 text-xs text-amber-700">
               {check.errors.join(" ")}
             </p>
           ) : null}
-          <pre className="max-h-56 overflow-auto rounded bg-zinc-100 p-3 text-[11px] leading-relaxed dark:bg-zinc-900">
+          <pre className="max-h-56 overflow-auto rounded bg-paper-100 p-3 text-[11px] leading-relaxed">
             {json}
           </pre>
           <button
@@ -133,7 +133,7 @@ export function CornerPicker({ templateId }: { templateId: string }) {
               void navigator.clipboard.writeText(json);
               setCopied(true);
             }}
-            className="mt-2 rounded bg-zinc-900 px-3 py-1.5 text-xs font-medium text-white dark:bg-zinc-100 dark:text-zinc-900"
+            className="mt-2 rounded bg-ink-900 px-3 py-1.5 text-xs font-medium text-white"
           >
             {copied ? "Copied" : `Copy — paste into mockup-templates/${templateId}/template.json`}
           </button>

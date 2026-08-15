@@ -1,9 +1,18 @@
 import Link from "next/link";
 
 import { DriveStatus } from "@/components/drive-status";
-import { listBatches } from "@/lib/pipeline/store";
+import {
+  Badge,
+  ButtonLink,
+  Card,
+  Empty,
+  PageHeader,
+  Section,
+} from "@/components/ui";
+import { listBatches, listJobs } from "@/lib/pipeline/store";
 import { readSettings } from "@/lib/pipeline/settings";
 import { CATEGORY_LABEL } from "@/lib/print/title";
+import { hasReached, type PosterJob } from "@/lib/print/types";
 
 export default async function Home() {
   const [batches, settings] = await Promise.all([
@@ -11,77 +20,108 @@ export default async function Home() {
     readSettings(),
   ]);
 
-  return (
-    <main className="mx-auto w-full max-w-3xl px-6 py-16">
-      <div className="flex items-baseline justify-between">
-        <h1 className="text-2xl font-semibold tracking-tight">Litwalls Studio</h1>
-        <div className="flex gap-4 text-sm text-zinc-500">
-          <Link href="/templates" className="underline-offset-4 hover:underline">
-            Templates
-          </Link>
-          <Link href="/settings" className="underline-offset-4 hover:underline">
-            Settings
-          </Link>
-        </div>
-      </div>
-      <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
-        Poster processing and publishing. Local only — this never ships.
-      </p>
+  // Counts per batch, so the list answers "what still needs me?" at a glance
+  // rather than only "what exists".
+  const withCounts = await Promise.all(
+    batches.map(async (batch) => ({
+      batch,
+      jobs: await listJobs(batch.id),
+    })),
+  );
 
-      <DriveStatus />
+  return (
+    <main className="mx-auto w-full max-w-6xl px-6 py-8">
+      <PageHeader
+        title="Batches"
+        meta="Upload artwork, review what the pipeline produced, publish to Shopify."
+        actions={
+          <ButtonLink href="/batches/new" variant="primary">
+            New batch
+          </ButtonLink>
+        }
+      />
 
       {settings.updatedAt === 0 ? (
-        <p className="mt-6 rounded border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-300">
-          Prices are still the built-in placeholders.{" "}
-          <Link href="/settings" className="underline underline-offset-4">
-            Set your real defaults
-          </Link>{" "}
-          before publishing anything.
-        </p>
+        <Card className="mt-6 border-warn-500/30 bg-warn-50 p-4">
+          <p className="text-sm text-warn-700">
+            <strong className="font-semibold">Prices are placeholders.</strong>{" "}
+            Set your real defaults in{" "}
+            <Link href="/settings" className="underline underline-offset-2">
+              Settings
+            </Link>{" "}
+            before publishing anything.
+          </p>
+        </Card>
       ) : null}
 
-      <section className="mt-10">
-        <div className="flex items-baseline justify-between">
-          <h2 className="text-xs font-medium uppercase tracking-widest text-zinc-500">
-            Batches
-          </h2>
-          <Link
-            href="/batches/new"
-            className="rounded bg-zinc-900 px-3 py-1.5 text-sm font-medium text-white dark:bg-zinc-100 dark:text-zinc-900"
-          >
-            New batch
-          </Link>
-        </div>
+      <div className="mt-6">
+        <DriveStatus />
+      </div>
 
-        {batches.length === 0 ? (
-          <p className="mt-4 text-sm text-zinc-500">
-            No batches yet. Create one to start uploading posters.
-          </p>
+      <Section title="All batches" className="mt-8">
+        {withCounts.length === 0 ? (
+          <Empty
+            title="No batches yet"
+            action={
+              <ButtonLink href="/batches/new" variant="primary">
+                Create your first batch
+              </ButtonLink>
+            }
+          >
+            A batch groups posters that share a category, format and prices.
+          </Empty>
         ) : (
-          <ul className="mt-4 divide-y divide-zinc-200/70 dark:divide-zinc-800">
-            {batches.map((batch) => (
+          <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {withCounts.map(({ batch, jobs }) => (
               <li key={batch.id}>
-                <Link
-                  href={`/batches/${batch.id}`}
-                  className="flex items-center justify-between py-3 text-sm hover:opacity-70"
-                >
-                  <span>
-                    <span className="font-medium">{batch.name}</span>
-                    <span className="ml-2 text-xs text-zinc-500">
-                      {CATEGORY_LABEL[batch.category]}
+                <Link href={`/batches/${batch.id}`} className="block">
+                  <Card className="h-full p-4 transition-shadow hover:shadow-[--shadow-pop]">
+                    <div className="flex items-start justify-between gap-2">
+                      <h3 className="truncate font-medium text-ink-900">
+                        {batch.name}
+                      </h3>
+                      <Badge>{CATEGORY_LABEL[batch.category]}</Badge>
+                    </div>
+
+                    <p className="mt-1 text-xs text-ink-400">
+                      {jobs.length} poster{jobs.length === 1 ? "" : "s"}
                       {batch.kind === "split3" ? " · split" : ""}
-                    </span>
-                  </span>
-                  <span className="text-xs text-zinc-500">
-                    {batch.jobIds.length} poster
-                    {batch.jobIds.length === 1 ? "" : "s"}
-                  </span>
+                    </p>
+
+                    <div className="mt-3 flex flex-wrap gap-1">
+                      <Progress jobs={jobs} />
+                    </div>
+                  </Card>
                 </Link>
               </li>
             ))}
           </ul>
         )}
-      </section>
+      </Section>
     </main>
+  );
+}
+
+function Progress({ jobs }: { jobs: PosterJob[] }) {
+  if (jobs.length === 0) {
+    return <span className="text-xs text-ink-400">empty</span>;
+  }
+
+  const review = jobs.filter(
+    (job) => job.status.kind === "needs-review" && job.stage !== "approved",
+  ).length;
+  const approved = jobs.filter((job) => job.stage === "approved").length;
+  const published = jobs.filter((job) => hasReached(job.stage, "published")).length;
+  const failed = jobs.filter((job) => job.status.kind === "failed").length;
+  const waiting = jobs.length - review - approved - published - failed;
+
+  return (
+    <>
+      {waiting > 0 ? <Badge>{waiting} to process</Badge> : null}
+      {review > 0 ? <Badge tone="accent">{review} to review</Badge> : null}
+      {approved > 0 ? <Badge tone="ok">{approved} approved</Badge> : null}
+      {published > 0 ? <Badge tone="ok">{published} live</Badge> : null}
+      {failed > 0 ? <Badge tone="danger">{failed} failed</Badge> : null}
+    </>
   );
 }

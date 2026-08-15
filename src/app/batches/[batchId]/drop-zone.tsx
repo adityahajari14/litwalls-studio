@@ -98,10 +98,10 @@ export function DropZone({
           void upload(event.dataTransfer.files);
         }}
         onClick={() => inputRef.current?.click()}
-        className={`cursor-pointer rounded-lg border-2 border-dashed p-10 text-center transition-colors ${
+        className={`cursor-pointer rounded-[--radius-card] border-2 border-dashed p-8 text-center transition-colors ${
           dragging
-            ? "border-zinc-900 bg-zinc-50 dark:border-zinc-100 dark:bg-zinc-900"
-            : "border-zinc-300 dark:border-zinc-700"
+            ? "border-accent-500 bg-accent-50"
+            : "border-paper-300 bg-white/60 hover:border-paper-400 hover:bg-white"
         }`}
       >
         <input
@@ -121,12 +121,12 @@ export function DropZone({
             <p className="font-medium">
               Uploading {progress.index} of {progress.total}
             </p>
-            <p className="mt-1 truncate text-zinc-500">{progress.name}</p>
+            <p className="mt-1 truncate text-ink-500">{progress.name}</p>
           </div>
         ) : (
           <div className="text-sm">
             <p className="font-medium">Drop poster artwork here</p>
-            <p className="mt-1 text-zinc-500">
+            <p className="mt-1 text-ink-500">
               or click to choose files — JPG, PNG, WebP, TIFF, AVIF up to{" "}
               {formatBytes(MAX_FILE_BYTES)} each
             </p>
@@ -135,14 +135,14 @@ export function DropZone({
       </div>
 
       {added > 0 && !progress ? (
-        <p className="mt-3 text-sm text-emerald-600 dark:text-emerald-400">
+        <p className="mt-3 text-sm text-ok-700">
           Added {added} poster{added === 1 ? "" : "s"}
           {initialCount > 0 ? ` — ${initialCount + added} in this batch` : ""}.
         </p>
       ) : null}
 
       {problems.length > 0 ? (
-        <ul className="mt-3 space-y-1 text-sm text-amber-600 dark:text-amber-400">
+        <ul className="mt-3 space-y-1 text-sm text-warn-700">
           {problems.map((problem) => (
             <li key={problem}>{problem}</li>
           ))}
