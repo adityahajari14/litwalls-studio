@@ -10,7 +10,8 @@ import {
   resolvePriceTable,
   validCompareAt,
 } from "../src/lib/print/pricing.ts";
-import { CATEGORY_TAG, ensureCategoryTag } from "../src/lib/print/title.ts";
+import { ensureCategoryTag } from "../src/lib/print/title.ts";
+import { MANUAL, MARVEL, MOVIES } from "./fixtures/categories.ts";
 
 test("job price wins over batch, batch over settings", () => {
   const levels = {
@@ -104,25 +105,25 @@ test("compareAt only shows when it is genuinely higher", () => {
 test("category tag is added when missing", () => {
   // Collections are smart and keyed on tags, so a missing tag means the
   // product publishes live but appears in no collection.
-  assert.deepEqual(ensureCategoryTag(["Spider Man"], "marvel"), [
+  assert.deepEqual(ensureCategoryTag(["Spider Man"], MARVEL), [
     "Marvel",
     "Spider Man",
   ]);
 });
 
 test("category tag is not duplicated, even across case", () => {
-  assert.deepEqual(ensureCategoryTag(["Marvel", "Loki"], "marvel"), [
+  assert.deepEqual(ensureCategoryTag(["Marvel", "Loki"], MARVEL), [
     "Marvel",
     "Loki",
   ]);
   // The live tag cloud already has near-duplicates; adding "Marvel" beside an
   // existing "marvel" would make that worse for no benefit.
-  assert.deepEqual(ensureCategoryTag(["marvel"], "marvel"), ["marvel"]);
+  assert.deepEqual(ensureCategoryTag(["marvel"], MARVEL), ["marvel"]);
 });
 
 test("movies-tv uses the tag the smart collection actually matches", () => {
   // Verified against the live store: Movies & TV matches Movies OR Series OR
   // Netflix. "Movies" is the one the existing catalogue uses.
-  assert.equal(CATEGORY_TAG["movies-tv"], "Movies");
-  assert.deepEqual(ensureCategoryTag([], "movies-tv"), ["Movies"]);
+  assert.equal(MOVIES.tag, "Movies");
+  assert.deepEqual(ensureCategoryTag([], MOVIES), ["Movies"]);
 });

@@ -11,7 +11,6 @@ import {
 } from "@/components/ui";
 import { listBatches, listJobs } from "@/lib/pipeline/store";
 import { readSettings } from "@/lib/pipeline/settings";
-import { CATEGORY_LABEL } from "@/lib/print/title";
 import { hasReached, type PosterJob } from "@/lib/print/types";
 
 export default async function Home() {
@@ -75,12 +74,12 @@ export default async function Home() {
             {withCounts.map(({ batch, jobs }) => (
               <li key={batch.id}>
                 <Link href={`/batches/${batch.id}`} className="block">
-                  <Card className="edge-lit h-full p-4 transition-all duration-200 hover:border-paper-400 hover:shadow-[--shadow-pop]">
+                  <Card className="h-full p-4 transition-all duration-200 hover:border-paper-400">
                     <div className="flex items-start justify-between gap-2">
                       <h3 className="truncate font-medium text-ink-900">
                         {batch.name}
                       </h3>
-                      <Badge>{CATEGORY_LABEL[batch.category]}</Badge>
+                      <Badge>{batch.category.label}</Badge>
                     </div>
 
                     <p className="tnum mt-1 font-mono text-[11px] uppercase tracking-[0.1em] text-ink-400">

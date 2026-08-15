@@ -4,6 +4,8 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
+import { Search } from "@/components/search";
+
 /**
  * Persistent top navigation.
  *
@@ -14,6 +16,7 @@ import { usePathname } from "next/navigation";
  */
 const LINKS = [
   { href: "/", label: "Batches" },
+  { href: "/published", label: "Published" },
   { href: "/library", label: "Images" },
   { href: "/templates", label: "Mockups" },
   { href: "/settings", label: "Settings" },
@@ -40,7 +43,7 @@ export function AppNav() {
             width={155}
             height={54}
             priority
-            className="h-7 w-auto drop-shadow-[0_0_12px_rgb(255_112_32_/_0.35)] transition-all duration-300 group-hover:drop-shadow-[0_0_18px_rgb(255_140_26_/_0.6)]"
+            className="h-7 w-auto opacity-95 transition-opacity duration-200 group-hover:opacity-100"
           />
           <span className="hidden font-mono text-[10px] uppercase tracking-[0.22em] text-ink-400 sm:inline">
             Studio
@@ -65,20 +68,20 @@ export function AppNav() {
               {isCurrent(link.href) ? (
                 <span
                   aria-hidden
-                  className="absolute inset-x-3 -bottom-[13px] h-px bg-gradient-to-r from-transparent via-accent-500 to-transparent shadow-[0_0_10px_1px_rgb(255_140_26_/_0.7)]"
+                  className="absolute inset-x-3 -bottom-[13px] h-px bg-accent-500"
                 />
               ) : null}
             </Link>
           ))}
         </nav>
 
-        <span className="ml-auto flex items-center gap-2 rounded-full border border-paper-300/70 bg-paper-100/60 px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.16em] text-ink-400">
-          <span
-            aria-hidden
-            className="breathe size-1.5 rounded-full bg-ok-500 shadow-[0_0_7px_0_rgb(31_191_107_/_0.9)]"
-          />
-          Local
-        </span>
+        <div className="ml-auto flex items-center gap-3">
+          <Search />
+          <span className="hidden items-center gap-2 rounded-full border border-paper-300/70 bg-paper-100/60 px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.16em] text-ink-400 lg:flex">
+            <span aria-hidden className="breathe size-1.5 rounded-full bg-ok-500" />
+            Local
+          </span>
+        </div>
       </div>
     </header>
   );

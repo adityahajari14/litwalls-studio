@@ -1,7 +1,10 @@
 import { createBatch } from "@/lib/pipeline/create";
 import { listBatches, writeBatch } from "@/lib/pipeline/store";
-import { CATEGORY_IDS } from "@/lib/print/title";
-import type { CategoryId, PosterKind } from "@/lib/print/types";
+import {
+  fetchCategories,
+  fetchCategoriesFallback,
+} from "@/lib/shopify/collections";
+import type { PosterKind } from "@/lib/print/types";
 
 export async function GET() {
   return Response.json({ batches: await listBatches() });
@@ -17,21 +20,12 @@ export async function POST(request: Request) {
 
   const input = body as {
     name?: string;
-    category?: string;
+    categoryId?: string;
     kind?: string;
     prices?: Record<string, string>;
     compareAt?: Record<string, string>;
   };
 
-  // Validated rather than cast: category decides the title suffix, the
-  // collection tag and the Drive folder, so a bad value would produce a
-  // product filed under nothing at all.
-  if (!CATEGORY_IDS.includes(input.category as CategoryId)) {
-    return Response.json(
-      { error: `Unknown category. Expected one of: ${CATEGORY_IDS.join(", ")}` },
-      { status: 400 },
-    );
-  }
   if (input.kind !== "normal" && input.kind !== "split3") {
     return Response.json(
       { error: 'Unknown poster kind. Expected "normal" or "split3".' },
@@ -39,9 +33,32 @@ export async function POST(request: Request) {
     );
   }
 
+  // The category is resolved against LIVE Shopify collections rather than
+  // trusted from the client, then snapshotted onto the batch. Validating here
+  // means a stale browser tab cannot create a batch pointing at a collection
+  // that has since been renamed or deleted.
+  let categories;
+  try {
+    categories = await fetchCategories();
+  } catch {
+    categories = await fetchCategoriesFallback().catch(() => []);
+  }
+
+  const category = categories.find((c) => c.id === input.categoryId);
+  if (!category) {
+    return Response.json(
+      {
+        error: categories.length
+          ? `Unknown collection. Expected one of: ${categories.map((c) => c.id).join(", ")}`
+          : "Could not read collections from Shopify. Check the Admin token.",
+      },
+      { status: 400 },
+    );
+  }
+
   const batch = createBatch({
     name: String(input.name ?? ""),
-    category: input.category as CategoryId,
+    category,
     kind: input.kind as PosterKind,
     prices: input.prices,
     compareAt: input.compareAt,

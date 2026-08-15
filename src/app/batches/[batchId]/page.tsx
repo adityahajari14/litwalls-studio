@@ -9,7 +9,6 @@ import { hasReached } from "@/lib/print/types";
 import { listJobs, readBatch } from "@/lib/pipeline/store";
 import { resolvePriceTable } from "@/lib/print/pricing";
 import { readSettings } from "@/lib/pipeline/settings";
-import { CATEGORY_LABEL } from "@/lib/print/title";
 import { SIZES } from "@/lib/print/sizes";
 
 export default async function BatchPage(
@@ -44,7 +43,7 @@ export default async function BatchPage(
         title={batch.name}
         meta={
           <>
-            <Badge>{CATEGORY_LABEL[batch.category]}</Badge>
+            <Badge>{batch.category.label}</Badge>
             <Badge>
               {batch.kind === "split3" ? "Split — 3 panels" : "Single sheet"}
             </Badge>
@@ -57,6 +56,17 @@ export default async function BatchPage(
         }
         actions={
           <>
+            {/* A plain link, not fetch: the browser's own download handling
+                streams a multi-gigabyte archive without buffering it in JS. */}
+            {jobs.length > 0 ? (
+              <a
+                href={`/api/batches/${batch.id}/export`}
+                className="inline-flex h-9 items-center rounded-lg border border-paper-400/70 bg-paper-200 px-3.5 text-sm font-medium text-ink-700 transition-colors hover:border-paper-500 hover:bg-paper-300 hover:text-ink-900"
+                title="Originals, print files and mockups as a ZIP"
+              >
+                Export
+              </a>
+            ) : null}
             {unprocessed.length > 0 ? (
               <RunButton batchId={batch.id} pending={unprocessed.length} />
             ) : null}

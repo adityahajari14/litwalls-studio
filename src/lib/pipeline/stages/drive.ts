@@ -3,7 +3,7 @@ import "server-only";
 import { ensureFolderPath, uploadFile } from "@/lib/drive/files";
 import { jobAsset } from "@/lib/pipeline/paths";
 import { readBatch, updateJob } from "@/lib/pipeline/store";
-import { CATEGORY_LABEL, formatTitle } from "@/lib/print/title";
+import { formatTitle } from "@/lib/print/title";
 import { err, ok, type Result } from "@/lib/result";
 import type { DriveRefs, PosterJob } from "@/lib/print/types";
 
@@ -75,7 +75,7 @@ export async function uploadToDrive(job: PosterJob): Promise<Result<DriveRefs>> 
   );
 
   const folder = await ensureFolderPath([
-    CATEGORY_LABEL[batch.category],
+    batch.category.label,
     folderName,
   ]);
   if (!folder.ok) return folder;

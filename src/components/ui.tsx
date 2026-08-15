@@ -19,11 +19,11 @@ const BUTTON_BASE =
   "inline-flex items-center justify-center gap-1.5 rounded-lg font-medium transition-all duration-150 active:translate-y-px disabled:cursor-not-allowed disabled:opacity-40 disabled:active:translate-y-0";
 
 const BUTTON_VARIANTS = {
-  /* A flame gradient rather than a flat fill, matching the logo, plus a glow —
-     on a dark ground a flat filled button reads as just another panel. Dark
-     text on the warm fill, because white on orange fails contrast. */
+  /* A flat indigo fill with a lit top edge. No glow — depth comes from the
+     inset highlight and the surface beneath, which is how a real control
+     reads. White text clears contrast comfortably on this fill. */
   primary:
-    "bg-gradient-to-b from-accent-500 to-accent-600 text-[#1a0a00] shadow-[0_0_18px_-4px_rgb(255_112_32_/_0.55)] hover:from-accent-700 hover:to-accent-500 hover:shadow-[0_0_26px_-3px_rgb(255_140_26_/_0.7)]",
+    "bg-accent-500 text-white shadow-[inset_0_1px_0_0_rgb(255_255_255_/_0.18)] hover:bg-accent-600",
   secondary:
     "border border-paper-400/70 bg-paper-200 text-ink-700 hover:border-paper-500 hover:bg-paper-300 hover:text-ink-900",
   ghost: "text-ink-500 hover:bg-paper-200 hover:text-ink-900",
@@ -112,12 +112,9 @@ export function Section({
     <section className={className}>
       <div className="flex min-h-7 items-center justify-between gap-3">
         <h2 className="flex items-center gap-2 font-mono text-[10px] font-medium uppercase tracking-[0.2em] text-ink-400">
-          {/* A short flame tick before the label — a small brand signature
-              that also gives the eye an anchor when scanning for a section. */}
-          <span
-            aria-hidden
-            className="h-3 w-px bg-gradient-to-b from-accent-500 to-transparent"
-          />
+          {/* A short tick before the label — an anchor for the eye when
+              scanning a long page for a particular section. */}
+          <span aria-hidden className="h-3 w-px bg-paper-500" />
           {title}
         </h2>
         {action}
@@ -233,8 +230,8 @@ export function Segmented<T extends string>({
             "rounded-md font-medium transition-all",
             size === "sm" ? "px-2 py-0.5 text-xs" : "px-2.5 py-1 text-sm",
             value === option.value
-              ? "bg-accent-500/15 text-accent-700 shadow-[inset_0_0_0_1px_rgb(255_140_26_/_0.35)]"
-              : "text-ink-500 hover:text-ink-900",
+              ? "bg-paper-300 text-ink-900"
+              : "text-ink-500 hover:text-ink-700",
           )}
         >
           {option.label}

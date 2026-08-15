@@ -7,6 +7,12 @@ import { jobAsset } from "@/lib/pipeline/paths";
 import { descriptionFor } from "@/lib/print/description";
 import { resolvePriceTable, validCompareAt } from "@/lib/print/pricing";
 import { SIZES } from "@/lib/print/sizes";
+import {
+  seoDescriptionFor,
+  seoTitleFor,
+  skuFor,
+} from "@/lib/print/identity";
+import { recordPublished } from "@/lib/pipeline/registry";
 import { ensureCategoryTag, formatTitle } from "@/lib/print/title";
 import type {
   Batch,
@@ -269,6 +275,18 @@ export async function publishJob(options: {
         optionValues: [{ optionName: "Size", name: size.label }],
         price,
         compareAtPrice: validCompareAt(compareAt[size.id], price),
+        // No product in the catalogue had a SKU. For print-to-order this is
+        // the field that tells whoever is printing exactly what to print
+        // straight off the order line, without opening the product.
+        inventoryItem: {
+          sku: skuFor({
+            category: batch.category,
+            subject,
+            sequence,
+            sizeId: size.id,
+            split: job.kind === "split3",
+          }),
+        },
         // Print-on-demand never goes out of stock, so selling must not be
         // blocked by an inventory count nobody is maintaining.
         inventoryPolicy: "CONTINUE",
@@ -329,6 +347,15 @@ export async function publishJob(options: {
         // collections are smart collections keyed on tags, so a missing tag
         // means a product that is live but appears nowhere.
         tags: ensureCategoryTag(job.metadata?.tags ?? [], batch.category),
+        // Every hand-made product in the catalogue carries an SEO description
+        // and Studio was publishing none — making its products strictly worse
+        // in search than the ones done by hand. The title is written rather
+        // than defaulted: Shopify would otherwise use "Spider Man #06 | Marvel
+        // Posters", where the "#06" is meaningless to a shopper.
+        seo: {
+          title: seoTitleFor({ subject, category: batch.category }),
+          description: seoDescriptionFor(subject),
+        },
         productOptions: [
           {
             name: "Size",
@@ -385,6 +412,31 @@ export async function publishJob(options: {
         "publish: no sales channels found — the product will not appear on the storefront.",
       );
     }
+
+    // Recorded OUTSIDE the batch, so duplicate detection still recognises this
+    // artwork after the batch is deleted — which is exactly when the record
+    // starts being worth having. Best-effort: the product is live either way,
+    // and losing a registry entry must not report the publish as failed.
+    await recordPublished({
+      fingerprint: job.probe?.fingerprint ?? "",
+      productId: product.id,
+      handle: product.handle,
+      title,
+      subject,
+      categoryId: batch.category.id,
+      categoryLabel: batch.category.label,
+      status: options.status ?? "ACTIVE",
+      publishedAt: Date.now(),
+      batchId: job.batchId,
+      jobId: job.id,
+      sourceName: job.sourceName,
+    }).catch((cause) => {
+      console.warn(
+        `publish: could not record "${title}" in the registry: ${
+          cause instanceof Error ? cause.message : String(cause)
+        }`,
+      );
+    });
 
     return ok({
       productId: product.id,

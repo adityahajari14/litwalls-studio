@@ -10,6 +10,7 @@ import {
   subjectFromFilename,
   subjectKey,
 } from "../src/lib/print/title.ts";
+import { MARVEL, MUSIC } from "./fixtures/categories.ts";
 
 /**
  * Tested against a snapshot of the REAL catalogue rather than invented
@@ -95,23 +96,23 @@ test("formatTitle round-trips a parsed title", () => {
   const original = "Travis Scott #07 | Music Posters";
   const parts = parseTitle(original);
   assert.ok(parts);
-  assert.equal(formatTitle(parts, "music"), original);
+  assert.equal(formatTitle(parts, MUSIC), original);
 });
 
 test("formatTitle round-trips a subtitled title", () => {
   const original = "Zayn #02 - Nobody is Listening | Music Posters";
   const parts = parseTitle(original);
   assert.ok(parts);
-  assert.equal(formatTitle(parts, "music"), original);
+  assert.equal(formatTitle(parts, MUSIC), original);
 });
 
 test("formatTitle zero-pads below 10 and widens past 99", () => {
   assert.equal(
-    formatTitle({ subject: "Loki", sequence: 3 }, "marvel"),
+    formatTitle({ subject: "Loki", sequence: 3 }, MARVEL),
     "Loki #03 | Marvel Posters",
   );
   assert.equal(
-    formatTitle({ subject: "Loki", sequence: 100 }, "marvel"),
+    formatTitle({ subject: "Loki", sequence: 100 }, MARVEL),
     "Loki #100 | Marvel Posters",
   );
 });

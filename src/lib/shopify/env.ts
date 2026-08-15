@@ -33,6 +33,16 @@ function storeOrigin() {
 }
 
 /**
+ * The store's admin origin, for deep-linking to a product.
+ *
+ * Derived from the shop domain rather than configured separately — one fewer
+ * env var to get wrong, and it is always the same host.
+ */
+export function storeAdminUrl(): string {
+  return `${storeOrigin()}/admin`;
+}
+
+/**
  * The Admin API — used to create products, mint upload targets for product
  * media, and read existing titles when numbering.
  *

@@ -1,4 +1,4 @@
-import type { CategoryId } from "@/lib/print/types";
+import type { Category } from "@/lib/print/types";
 
 /**
  * Product titles, matching the convention the store already uses.
@@ -13,72 +13,39 @@ import type { CategoryId } from "@/lib/print/types";
  */
 
 /**
- * The title suffix for each collection.
+ * Assemble a product title.
  *
- * Note "Movies & TV", plural. The live catalogue contains one product reading
- * "Movie & TV Posters" (singular) against many reading "Movies & TV Posters".
- * That is a typo, and this table is the deliberate decision not to propagate
- * it — new products get the majority spelling.
+ * The suffix comes from the CATEGORY OBJECT rather than a lookup table, so
+ * adding a collection in Shopify is enough — no code change. The batch carries
+ * a snapshot of its category, which also means a batch published months later
+ * still uses the suffix that was correct when it was created.
  */
-export const CATEGORY_SUFFIX: Record<CategoryId, string> = {
-  marvel: "Marvel Posters",
-  dc: "DC Posters",
-  "movies-tv": "Movies & TV Posters",
-  music: "Music Posters",
-};
-
-export const CATEGORY_LABEL: Record<CategoryId, string> = {
-  marvel: "Marvel",
-  dc: "DC",
-  "movies-tv": "Movies & TV",
-  music: "Music",
-};
-
-export const CATEGORY_IDS = Object.keys(CATEGORY_SUFFIX) as CategoryId[];
-
-/**
- * The tag that puts a product in its collection.
- *
- * All four collections in the live store are SMART collections keyed on tags,
- * verified against the Admin API:
- *
- *   Marvel        TAG = "Marvel"
- *   DC            TAG = "DC"
- *   Music         TAG = "Music"
- *   Movies & TV   TAG = "Movies" OR "Series" OR "Netflix"
- *
- * That has a concrete consequence for publishing: membership is a side effect
- * of tagging, so there is NO collectionAddProducts call to make. Get the tag
- * right and the product appears; get it wrong and the product is live but
- * invisible in every collection, which is the failure mode to watch for.
- *
- * "Movies" is chosen for movies-tv because it is the tag the existing
- * catalogue actually uses — "Series" and "Netflix" also match the rule, but
- * picking the majority spelling keeps the tag cloud from fragmenting further.
- *
- * These tags are REQUIRED. `ensureCategoryTag` below adds one if the model or
- * a human left it out, rather than trusting either to remember.
- */
-export const CATEGORY_TAG: Record<CategoryId, string> = {
-  marvel: "Marvel",
-  dc: "DC",
-  "movies-tv": "Movies",
-  music: "Music",
-};
+export function categorySuffix(category: Pick<Category, "suffix">): string {
+  return category.suffix;
+}
 
 /**
  * Guarantee the collection tag is present, without disturbing the rest.
  *
- * Compared case-insensitively because the live tag cloud already contains
+ * Collection membership in this store is a SIDE EFFECT OF TAGGING — every
+ * collection is smart and keyed on a tag. Get the tag right and the product
+ * appears; get it wrong and the product is live but invisible in every
+ * collection, which is the failure mode to watch for. So the tag is added
+ * rather than trusted to a model or a human.
+ *
+ * Compared case-insensitively because the live tag cloud already carries
  * near-duplicates ("Weeknd"/"weekend"/"Weekend"); adding a second "marvel"
- * beside an existing "Marvel" would make that worse while doing nothing
- * useful. An existing tag that differs only by case is left exactly as it is.
+ * beside an existing "Marvel" would make that worse for no benefit.
+ *
+ * A manual collection has no tag, so there is nothing to add — the publisher
+ * handles those with an explicit collection add.
  */
 export function ensureCategoryTag(
   tags: readonly string[],
-  category: CategoryId,
+  category: Pick<Category, "tag">,
 ): string[] {
-  const required = CATEGORY_TAG[category];
+  const required = category.tag;
+  if (!required) return [...tags];
   const present = tags.some(
     (tag) => tag.trim().toLowerCase() === required.toLowerCase(),
   );
@@ -113,7 +80,7 @@ export function subjectKey(subject: string): string {
  */
 export function formatTitle(
   parts: { subject: string; sequence: number; subtitle?: string | null },
-  category: CategoryId,
+  category: Pick<Category, "suffix">,
 ): string {
   const subject = parts.subject.trim();
   const number = String(parts.sequence).padStart(2, "0");
@@ -121,7 +88,7 @@ export function formatTitle(
   const head = subtitle
     ? `${subject} #${number} - ${subtitle}`
     : `${subject} #${number}`;
-  return `${head} | ${CATEGORY_SUFFIX[category]}`;
+  return `${head} | ${category.suffix}`;
 }
 
 /**

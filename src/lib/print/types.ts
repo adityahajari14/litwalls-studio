@@ -19,11 +19,33 @@ export type Pt = { x: number; y: number };
 export type PosterKind = "normal" | "split3";
 
 /**
- * The store's four collections. These drive three things at once — the title
- * suffix, the Shopify collection, and the Drive folder — which is why the
- * batch picks one rather than each stage guessing.
+ * A collection handle. Was a closed union of four, which meant adding a
+ * category was a code change; it is now whatever Shopify reports.
  */
-export type CategoryId = "marvel" | "dc" | "movies-tv" | "music";
+export type CategoryId = string;
+
+/**
+ * A collection a batch can publish into.
+ *
+ * Drives three things at once — the title suffix, the tag that grants
+ * collection membership, and the Drive folder — which is why a batch picks one
+ * rather than each stage guessing.
+ */
+export type Category = {
+  /** The collection handle, e.g. "movies-tv". */
+  id: CategoryId;
+  /** Display name, e.g. "Movies & TV". */
+  label: string;
+  /** Title suffix, e.g. "Movies & TV Posters". */
+  suffix: string;
+  /**
+   * The tag that puts a product in this collection. Null for a manual
+   * collection, where membership needs an explicit add rather than a tag.
+   */
+  tag: string | null;
+  collectionId: string;
+  smart: boolean;
+};
 
 /**
  * A rectangle in 0..1 space, origin top-left.
@@ -91,6 +113,18 @@ export type ProbeResult = {
    * and pretending otherwise is how a soft print reaches a customer.
    */
   upscaled: boolean;
+  /**
+   * Perceptual fingerprint of the source artwork, for duplicate detection.
+   * Null on jobs probed before fingerprinting existed.
+   */
+  fingerprint?: string | null;
+  /** Anything already published that looks like this. Empty is the norm. */
+  duplicates?: {
+    productId: string;
+    title: string;
+    handle: string;
+    distance: number;
+  }[];
   /** Effective DPI at each size, given the master's real pixels. */
   dpiBySize: Record<SizeId, number>;
   /**
@@ -254,7 +288,14 @@ export type PosterJob = {
 export type Batch = {
   id: string;
   name: string;
-  category: CategoryId;
+  /**
+   * A SNAPSHOT of the collection, not a reference.
+   *
+   * Carrying the label, suffix and tag means a batch published months later
+   * still uses the naming that was correct when it was created, and that
+   * nothing needs a live Shopify call to render a title.
+   */
+  category: Category;
   /** Default kind for jobs ingested into this batch. */
   kind: PosterKind;
   /** Library images attached to every job in the batch by default. */

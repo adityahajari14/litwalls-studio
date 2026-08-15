@@ -3,7 +3,9 @@ import "server-only";
 import { stat } from "node:fs/promises";
 import sharp from "sharp";
 
+import { fingerprint } from "@/lib/image/fingerprint";
 import { jobAsset } from "@/lib/pipeline/paths";
+import { findDuplicates } from "@/lib/pipeline/registry";
 import {
   cropAspectFor,
   DPI_FLOOR,
@@ -40,12 +42,24 @@ export async function probe(job: PosterJob): Promise<ProbeResult> {
     throw new Error(`Could not read image dimensions from ${job.sourceName}`);
   }
 
+  // Fingerprint the SOURCE, not the master: the master is a re-encode, and we
+  // want the identity of the artwork the user actually supplied.
+  const print = await fingerprint(path).catch(() => null);
+  const matches = print ? await findDuplicates(print) : [];
+
   return {
     width,
     height,
     format: metadata.format ?? "unknown",
     bytes: stats.size,
     upscaled: false,
+    fingerprint: print,
+    duplicates: matches.map((match) => ({
+      productId: match.record.productId,
+      title: match.record.title,
+      handle: match.record.handle,
+      distance: match.distance,
+    })),
     dpiBySize: dpiBySize({ width, height }, job.kind),
     coverage: coverageFor({ width, height }, job.kind),
   };

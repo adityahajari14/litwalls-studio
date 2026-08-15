@@ -1,13 +1,12 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { PriceTable } from "@/components/price-table";
 import { Button, Field, Input } from "@/components/ui";
 import type { PartialPriceTable, PriceTable as Prices } from "@/lib/print/pricing";
-import { CATEGORY_LABEL, CATEGORY_IDS, CATEGORY_TAG } from "@/lib/print/title";
-import type { CategoryId, PosterKind } from "@/lib/print/types";
+import type { Category, PosterKind } from "@/lib/print/types";
 
 export function NewBatchForm({
   inheritedPrices,
@@ -17,10 +16,34 @@ export function NewBatchForm({
   inheritedCompare: PartialPriceTable;
 }) {
   const router = useRouter();
-  const [category, setCategory] = useState<CategoryId>("marvel");
+  // null while loading — distinct from an empty list, which means Shopify has
+  // no collections and the user needs to make one.
+  const [categories, setCategories] = useState<Category[] | null>(null);
+  const [categoryId, setCategoryId] = useState<string>("");
   const [kind, setKind] = useState<PosterKind>("normal");
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    void fetch("/api/categories")
+      .then((response) => response.json())
+      .then((body) => {
+        if (cancelled) return;
+        const list: Category[] = body.categories ?? [];
+        setCategories(list);
+        // Preselect the first, so the common case is one fewer click.
+        if (list.length > 0) setCategoryId((current) => current || list[0].id);
+      })
+      .catch(() => {
+        if (!cancelled) setCategories([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const selected = categories?.find((c) => c.id === categoryId) ?? null;
 
   async function onSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -42,7 +65,7 @@ export function NewBatchForm({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: form.get("name"),
-          category,
+          categoryId,
           kind,
           prices,
           compareAt,
@@ -71,31 +94,57 @@ export function NewBatchForm({
       </Field>
 
       <fieldset>
-        <legend className="text-sm font-medium text-ink-700">Category</legend>
-        <div className="mt-2 flex flex-wrap gap-2">
-          {CATEGORY_IDS.map((id) => (
-            <button
-              key={id}
-              type="button"
-              onClick={() => setCategory(id)}
-              className={`rounded-full border px-3 py-1 text-sm transition-colors ${
-                category === id
-                  ? "border-accent-600 bg-accent-600 text-white"
-                  : "border-paper-300 bg-paper-200 text-ink-600 hover:border-paper-400"
-              }`}
-            >
-              {CATEGORY_LABEL[id]}
-            </button>
-          ))}
-        </div>
-        <p className="mt-2 text-xs text-ink-500">
-          Sets the title suffix and adds the{" "}
-          <code className="rounded bg-paper-100 px-1">
-            {CATEGORY_TAG[category]}
-          </code>{" "}
-          tag, which is what puts the product in the {CATEGORY_LABEL[category]}{" "}
-          collection.
-        </p>
+        <legend className="text-sm font-medium text-ink-700">Collection</legend>
+
+        {categories === null ? (
+          <p className="mt-2 text-xs text-ink-400">Loading collections…</p>
+        ) : categories.length === 0 ? (
+          <p className="mt-2 text-xs text-warn-700">
+            No collections found in Shopify. Create one in the admin, then
+            reload.
+          </p>
+        ) : (
+          <div className="mt-2 flex flex-wrap gap-2">
+            {categories.map((option) => (
+              <button
+                key={option.id}
+                type="button"
+                onClick={() => setCategoryId(option.id)}
+                className={`rounded-full border px-3 py-1 text-sm transition-colors ${
+                  categoryId === option.id
+                    ? "border-accent-500 bg-accent-500 text-white"
+                    : "border-paper-300 bg-paper-200 text-ink-600 hover:border-paper-400"
+                }`}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {selected ? (
+          <p className="mt-2 text-xs text-ink-500">
+            Titles end{" "}
+            <code className="rounded bg-paper-200 px-1 text-ink-700">
+              | {selected.suffix}
+            </code>
+            {selected.tag ? (
+              <>
+                {" "}
+                and the{" "}
+                <code className="rounded bg-paper-200 px-1 text-ink-700">
+                  {selected.tag}
+                </code>{" "}
+                tag is added, which is what puts the product in this collection.
+              </>
+            ) : (
+              <>
+                . This is a manual collection, so products are added to it
+                directly rather than by tag.
+              </>
+            )}
+          </p>
+        ) : null}
       </fieldset>
 
       <fieldset>

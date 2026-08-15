@@ -1,8 +1,8 @@
 import "server-only";
 
 import { askGemini, geminiConfigured, prepareImage } from "@/lib/gemini/client";
-import { CATEGORY_LABEL, subjectFromFilename } from "@/lib/print/title";
-import type { AiMetadata, CategoryId } from "@/lib/print/types";
+import { subjectFromFilename } from "@/lib/print/title";
+import type { AiMetadata, Category } from "@/lib/print/types";
 
 /**
  * Identify what a poster depicts.
@@ -33,14 +33,14 @@ type RawMetadata = {
 };
 
 function buildPrompt(options: {
-  category: CategoryId;
+  category: Pick<Category, "label">;
   knownSubjects: string[];
   knownTags: string[];
 }): string {
   const { category, knownSubjects, knownTags } = options;
 
   return [
-    `You are cataloguing a poster for Litwalls, a poster shop. This poster belongs to the ${CATEGORY_LABEL[category]} collection.`,
+    `You are cataloguing a poster for Litwalls, a poster shop. This poster belongs to the ${category.label} collection.`,
     "",
     "Identify the poster and return JSON with these fields:",
     "",
@@ -123,7 +123,7 @@ export function fallbackMetadata(sourceName: string): AiMetadata {
 export async function describePoster(options: {
   image: string | Buffer;
   sourceName: string;
-  category: CategoryId;
+  category: Pick<Category, "label">;
   knownSubjects: string[];
   knownTags: string[];
 }): Promise<AiMetadata> {

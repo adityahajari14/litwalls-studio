@@ -46,7 +46,7 @@ export async function DriveStatus() {
     <p className="flex items-center gap-2 text-xs text-ink-400">
       <span
         aria-hidden
-        className="size-1.5 rounded-full bg-ok-500 shadow-[0_0_6px_0_rgb(34_197_94_/_0.9)]"
+        className="size-1.5 rounded-full bg-ok-500"
       />
       Drive connected — filing to{" "}
       <code className="font-mono text-ink-500">

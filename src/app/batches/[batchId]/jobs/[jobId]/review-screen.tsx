@@ -19,7 +19,7 @@ import {
   Textarea,
 } from "@/components/ui";
 import { SIZES } from "@/lib/print/sizes";
-import { CATEGORY_TAG, formatTitle } from "@/lib/print/title";
+import { formatTitle } from "@/lib/print/title";
 import type { PartialPriceTable, PriceTable as Prices } from "@/lib/print/pricing";
 import type {
   Batch,
@@ -417,7 +417,7 @@ export function ReviewScreen({
               placeholder="Spider Man, Movies"
             />
             <p className="mt-1 text-xs text-ink-400">
-              <code className="font-mono">{CATEGORY_TAG[batch.category]}</code>{" "}
+              <code className="font-mono">{batch.category.tag ?? "none"}</code>{" "}
               is added automatically — it is what puts this in the collection.
             </p>
           </Section>

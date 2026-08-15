@@ -4,7 +4,7 @@ import { newId } from "@/lib/pipeline/paths";
 import { normalizePriceTable } from "@/lib/print/pricing";
 import type {
   Batch,
-  CategoryId,
+  Category,
   PosterJob,
   PosterKind,
   SizeId,
@@ -22,7 +22,7 @@ import type {
 
 export function createBatch(input: {
   name: string;
-  category: CategoryId;
+  category: Category;
   kind: PosterKind;
   prices?: Partial<Record<SizeId, string>>;
   compareAt?: Partial<Record<SizeId, string>>;

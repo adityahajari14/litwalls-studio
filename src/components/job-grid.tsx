@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 
+import { BulkEditor } from "@/components/bulk-editor";
 import { Badge, Button, Empty } from "@/components/ui";
 import { useBatchStream } from "@/components/use-batch-stream";
 import { COVERAGE_WARN, type PosterJob } from "@/lib/print/types";
@@ -27,6 +28,7 @@ export function JobGrid({
   const jobs = useBatchStream(batchId, initialJobs);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
+  const [bulkOpen, setBulkOpen] = useState(false);
 
   const counts = useMemo(() => {
     let ready = 0;
@@ -93,8 +95,15 @@ export function JobGrid({
           {selected.size > 0 ? (
             <>
               <span>{selected.size} selected</span>
-              <Button size="sm" variant="ghost" onClick={() => setSelected(new Set())}>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => setSelected(new Set())}
+              >
                 Clear
+              </Button>
+              <Button size="sm" onClick={() => setBulkOpen((v) => !v)}>
+                Edit {selected.size}
               </Button>
             </>
           ) : null}
@@ -109,6 +118,19 @@ export function JobGrid({
           ) : null}
         </span>
       </div>
+
+      {bulkOpen && selected.size > 0 ? (
+        <BulkEditor
+          batchId={batchId}
+          count={selected.size}
+          jobIds={[...selected]}
+          onDone={() => {
+            setBulkOpen(false);
+            setSelected(new Set());
+            router.refresh();
+          }}
+        />
+      ) : null}
 
       <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
         {jobs.map((job) => (
@@ -143,14 +165,15 @@ function JobCard({
   const lowRes = [...new Set(job.assets.filter((a) => a.lowRes).map((a) => a.sizeId))];
   const coverage = job.probe?.coverage ?? 1;
   const reviewable = job.assets.length > 0;
+  const duplicates = job.probe?.duplicates ?? [];
 
   return (
     <li className="group relative">
       <div
-        className={`edge-lit overflow-hidden rounded-[--radius-card] border bg-gradient-to-b from-paper-200/80 to-paper-100 transition-all duration-200 ${
+        className={`overflow-hidden rounded-[--radius-card] border bg-gradient-to-b from-paper-200/80 to-paper-100 transition-all duration-200 ${
           selected
-            ? "border-accent-500/70 shadow-[--shadow-flame]"
-            : "border-paper-300/80 hover:border-paper-400 hover:shadow-[--shadow-pop]"
+            ? "border-accent-500"
+            : "border-paper-300/80 hover:border-paper-400"
         }`}
       >
         {/* A plain ground, not the checkerboard: these renders are opaque
@@ -171,7 +194,7 @@ function JobCard({
             <div className="grid h-full place-items-center gap-1.5 text-xs text-ink-400">
               {job.status.kind === "running" ? (
                 <>
-                  <span className="breathe size-1.5 rounded-full bg-accent-500 shadow-[0_0_8px_0_rgb(255_140_26_/_0.9)]" />
+                  <span className="breathe size-1.5 rounded-full bg-accent-500" />
                   <span className="font-mono uppercase tracking-[0.14em]">
                     processing
                   </span>
@@ -217,6 +240,14 @@ function JobCard({
 
           <div className="mt-1.5 flex flex-wrap gap-1">
             <StatusBadge job={job} />
+            {duplicates.length > 0 ? (
+              <Badge
+                tone="warn"
+                title={`Looks like: ${duplicates.map((d) => d.title).join(", ")}`}
+              >
+                possible duplicate
+              </Badge>
+            ) : null}
             {job.probe?.upscaled ? <Badge tone="warn">upscaled</Badge> : null}
             {coverage < COVERAGE_WARN ? (
               <Badge tone="warn">{Math.round(coverage * 100)}% used</Badge>
