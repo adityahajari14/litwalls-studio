@@ -5,7 +5,12 @@ import sharp, { type OverlayOptions } from "sharp";
 
 import { warpPerspective } from "@/lib/image/warp";
 import { TEMPLATES_DIR } from "@/lib/pipeline/paths";
-import type { MockupTemplate, Pt } from "@/lib/print/types";
+import {
+  quadForSize,
+  rectForSize,
+  referenceSizeOf,
+} from "@/lib/templates/placement";
+import type { MockupTemplate, Pt, SizeId } from "@/lib/print/types";
 
 /**
  * Place a poster into a room photo.
@@ -103,11 +108,14 @@ async function fitRect(
   const height = Math.max(1, Math.round(metadata.height * scale));
 
   return {
-    x: rect.x + Math.round((rect.width - width) / 2),
+    // Rounded because sharp's composite rejects a fractional left/top with an
+    // error that names the number but not the layer — and a hand-dragged or
+    // scale-derived rect is fractional more often than not.
+    x: Math.round(rect.x + (rect.width - width) / 2),
     // Bottom-aligned rather than centred: a poster that hangs lower than the
     // template intended looks placed, while one floating above its own shadow
     // looks like a compositing bug.
-    y: rect.y + (rect.height - height),
+    y: Math.round(rect.y + (rect.height - height)),
     width,
     height,
   };
@@ -178,6 +186,9 @@ function dist(a: Pt, b: Pt): number {
 }
 
 export type ComposeInput = {
+  /** Which print size this mockup represents. Selects the placement area, so
+   *  an A5 shows as a physically smaller poster on the same wall. */
+  sizeId?: SizeId;
   template: MockupTemplate;
   /** The poster to place: a path, or a buffer for an assembled split set. */
   poster: string | Buffer;
@@ -200,7 +211,10 @@ export async function composeMockup(
     // tall, and forcing either into the other's rect stretches the artwork:
     // circles become ellipses and faces get squashed. So the poster is fitted
     // inside the rect at its true aspect ratio, then centred.
-    const rect = await fitRect(poster, template.rect);
+    const rect = await fitRect(
+      poster,
+      rectForSize(template, input.sizeId ?? referenceSizeOf(template)),
+    );
 
     if (template.shadow && template.shadow > 0) {
       const shadow = shadowLayer(rect, template.shadow);
@@ -256,7 +270,10 @@ export async function composeMockup(
       // Same reasoning as the flat path: the quad is the wall area, not the
       // poster's shape. Shrinking it to the poster's aspect keeps a wide split
       // set from being stretched to fill a portrait wall panel.
-      corners: await fitQuad(poster, template.corners),
+      corners: await fitQuad(
+        poster,
+        quadForSize(template, input.sizeId ?? referenceSizeOf(template)),
+      ),
       canvas,
     });
     if (!warped) {

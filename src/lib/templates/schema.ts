@@ -1,4 +1,5 @@
 import { isUsableQuad } from "@/lib/image/homography";
+import { SIZE_IDS } from "@/lib/print/sizes";
 import type { MockupTemplate, Pt } from "@/lib/print/types";
 
 /**
@@ -102,6 +103,10 @@ export function validateTemplate(input: unknown): ValidationResult {
     errors.push('"kind" must be "flat" or "perspective".');
   }
 
+  if (t.sizing !== undefined) {
+    errors.push(...validateSizing(t.sizing, t.kind));
+  }
+
   if (t.shadow !== undefined) {
     if (typeof t.shadow !== "number" || t.shadow < 0 || t.shadow > 1) {
       errors.push('"shadow", if present, must be between 0 and 1.');
@@ -113,6 +118,73 @@ export function validateTemplate(input: unknown): ValidationResult {
 
   if (errors.length > 0) return { ok: false, errors };
   return { ok: true, template: input as MockupTemplate };
+}
+
+/**
+ * Per-size placement: which size the base area was drawn for, and any
+ * hand-adjusted overrides.
+ */
+function validateSizing(input: unknown, kind: unknown): string[] {
+  const errors: string[] = [];
+  if (typeof input !== "object" || input === null) {
+    return ['"sizing", if present, must be an object.'];
+  }
+
+  const sizing = input as Record<string, unknown>;
+
+  if (
+    typeof sizing.referenceSize !== "string" ||
+    !(SIZE_IDS as readonly string[]).includes(sizing.referenceSize)
+  ) {
+    errors.push(
+      `"sizing.referenceSize" must be one of: ${SIZE_IDS.join(", ")}.`,
+    );
+  }
+
+  const checkArea = (value: unknown, where: string) => {
+    if (kind === "perspective") {
+      if (!Array.isArray(value) || value.length !== 4 || !value.every(isPoint)) {
+        errors.push(`${where} must be four points.`);
+      } else if (!isUsableQuad(value as Pt[])) {
+        errors.push(`${where} must be a convex quad in TL, TR, BR, BL order.`);
+      }
+    } else {
+      const rect = value as Record<string, unknown> | undefined;
+      if (
+        !rect ||
+        !Number.isFinite(rect.x as number) ||
+        !Number.isFinite(rect.y as number) ||
+        !isPositiveInt(rect.width) ||
+        !isPositiveInt(rect.height)
+      ) {
+        errors.push(`${where} needs x, y and positive width and height.`);
+      }
+    }
+  };
+
+  checkArea(sizing.base, '"sizing.base"');
+
+  if (sizing.overrides !== undefined) {
+    if (typeof sizing.overrides !== "object" || sizing.overrides === null) {
+      errors.push('"sizing.overrides", if present, must be an object.');
+    } else {
+      for (const [sizeId, area] of Object.entries(
+        sizing.overrides as Record<string, unknown>,
+      )) {
+        if (!(SIZE_IDS as readonly string[]).includes(sizeId)) {
+          errors.push(`"sizing.overrides" has an unknown size "${sizeId}".`);
+          continue;
+        }
+        checkArea(area, `"sizing.overrides.${sizeId}"`);
+      }
+    }
+  }
+
+  if (sizing.perSize !== undefined && typeof sizing.perSize !== "boolean") {
+    errors.push('"sizing.perSize", if present, must be true or false.');
+  }
+
+  return errors;
 }
 
 /** Default gap between split panels in a mockup, in canvas pixels. */

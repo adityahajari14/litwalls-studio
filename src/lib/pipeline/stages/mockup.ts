@@ -2,6 +2,8 @@ import "server-only";
 
 import { assemblePanels, composeMockup } from "@/lib/image/compose";
 import { ensureDir, jobAsset, jobDir } from "@/lib/pipeline/paths";
+import { SIZE_IDS } from "@/lib/print/sizes";
+import { isPerSize, referenceSizeOf } from "@/lib/templates/placement";
 import { DEFAULT_PANEL_GAP } from "@/lib/templates/schema";
 import { usableTemplates } from "@/lib/templates/load";
 import type { MockupTemplate, PosterJob, RenderedMockup } from "@/lib/print/types";
@@ -45,26 +47,42 @@ export async function renderMockups(job: PosterJob): Promise<RenderedMockup[]> {
   const rendered: RenderedMockup[] = [];
 
   for (const template of chosen) {
-    const relPath = `mockups/${template.id}.jpg`;
-    try {
-      const size = await composeMockup({
-        template,
-        poster,
-        outPath: jobAsset(job.batchId, job.id, relPath),
-      });
-      rendered.push({
-        templateId: template.id,
-        relPath,
-        width: size.width,
-        height: size.height,
-      });
-    } catch (cause) {
-      // One broken template must not cost the job its other mockups. The
-      // template page reports the reason; here we simply carry on.
-      console.warn(
-        `mockup: template "${template.id}" failed for ${job.sourceName}: ` +
-          (cause instanceof Error ? cause.message : String(cause)),
-      );
+    // A per-size template produces one mockup per variant, each showing the
+    // poster at its true relative scale on the wall. Everything else produces
+    // a single shared image — four times the renders is not worth paying on
+    // every template when most look identical across sizes.
+    const sizes = isPerSize(template)
+      ? SIZE_IDS
+      : ([referenceSizeOf(template)] as const);
+
+    for (const sizeId of sizes) {
+      const perSize = isPerSize(template);
+      const relPath = perSize
+        ? `mockups/${template.id}-${sizeId}.jpg`
+        : `mockups/${template.id}.jpg`;
+
+      try {
+        const size = await composeMockup({
+          template,
+          poster,
+          sizeId,
+          outPath: jobAsset(job.batchId, job.id, relPath),
+        });
+        rendered.push({
+          templateId: template.id,
+          relPath,
+          width: size.width,
+          height: size.height,
+          sizeId: perSize ? sizeId : null,
+        });
+      } catch (cause) {
+        // One broken template must not cost the job its other mockups. The
+        // template page reports the reason; here we simply carry on.
+        console.warn(
+          `mockup: template "${template.id}" failed for ${job.sourceName}: ` +
+            (cause instanceof Error ? cause.message : String(cause)),
+        );
+      }
     }
   }
 

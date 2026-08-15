@@ -182,6 +182,11 @@ export type RenderedMockup = {
   relPath: string;
   width: number;
   height: number;
+  /**
+   * The print size this mockup shows, when the template renders per size.
+   * Null for a template that renders one shared image.
+   */
+  sizeId?: SizeId | null;
 };
 
 /**
@@ -272,28 +277,66 @@ export type Batch = {
  * which is the product format. Both discriminate their own union and never
  * appear on the same object.
  */
+/** An axis-aligned placement area, in canvas pixels. */
+export type PlacementRect = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
+
+/**
+ * Where the poster sits on the wall, per print size.
+ *
+ * A template defines the area for ONE reference size. The other sizes are
+ * derived from it by real-world scale — an A5 is 49.8% of an A3 linearly, so
+ * it occupies a proportionally smaller patch of the same wall. That is what
+ * makes a set of mockups honest: showing the same poster at the same size for
+ * every variant tells the customer nothing about what they are choosing.
+ *
+ * Any size can be overridden by hand when the derived placement is wrong —
+ * a shelf in the way, a frame that only fits one size.
+ */
+export type SizePlacement<T> = {
+  /** The size the base placement was authored against. */
+  referenceSize: SizeId;
+  /** The base placement, for `referenceSize`. */
+  base: T;
+  /** Hand-adjusted placements. Anything absent is derived from `base`. */
+  overrides?: Partial<Record<SizeId, T>>;
+  /**
+   * Render one mockup per size rather than a single shared one.
+   *
+   * Off by default because it multiplies render time by four, and most
+   * templates look fine with one image. Worth turning on for the hero
+   * template, where each variant getting its own correctly-scaled mockup is
+   * exactly what makes the size selector meaningful.
+   */
+  perSize?: boolean;
+};
+
+type TemplateBase = {
+  id: string;
+  name: string;
+  background: string;
+  overlay?: string;
+  canvas: { width: number; height: number };
+  shadow?: number;
+  suitsAspect?: number[];
+  /** Canvas-px gap between panels, split jobs only. Default 12. */
+  panelGap?: number;
+};
+
 export type MockupTemplate =
-  | {
-      id: string;
-      name: string;
+  | (TemplateBase & {
       kind: "flat";
-      background: string;
-      overlay?: string;
-      canvas: { width: number; height: number };
       /** Axis-aligned pixel rect on the canvas where the poster goes. */
-      rect: { x: number; y: number; width: number; height: number };
-      shadow?: number;
-      suitsAspect?: number[];
-      /** Canvas-px gap between panels, split jobs only. Default 12. */
-      panelGap?: number;
-    }
-  | {
-      id: string;
-      name: string;
+      rect: PlacementRect;
+      /** Per-size placement. Absent means every size uses `rect`. */
+      sizing?: SizePlacement<PlacementRect>;
+    })
+  | (TemplateBase & {
       kind: "perspective";
-      background: string;
-      overlay?: string;
-      canvas: { width: number; height: number };
       /**
        * Destination quad in canvas pixels, in TL → TR → BR → BL order. The
        * order is load-bearing: the homography maps the poster's unit corners
@@ -301,10 +344,8 @@ export type MockupTemplate =
        * mirrored or bow-tied poster rather than an error.
        */
       corners: [Pt, Pt, Pt, Pt];
-      shadow?: number;
-      suitsAspect?: number[];
-      panelGap?: number;
-    };
+      sizing?: SizePlacement<[Pt, Pt, Pt, Pt]>;
+    });
 
 /** An entry in the reusable product-image library (size guide, quality info…). */
 export type LibraryImage = {

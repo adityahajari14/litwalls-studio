@@ -1,106 +1,105 @@
 import Link from "next/link";
 
-import { CornerPicker } from "@/app/templates/corner-picker";
+import { NewTemplate } from "@/app/templates/new-template";
+import { Badge, Card, Empty, PageHeader, Section } from "@/components/ui";
 import { loadTemplates } from "@/lib/templates/load";
 
-export const metadata = { title: "Mockup templates · Litwalls Studio" };
+export const metadata = { title: "Mockups · Litwalls Studio" };
 
 export default async function TemplatesPage() {
   const entries = await loadTemplates();
-  const usable = entries.filter((entry) => entry.ok);
+  const ready = entries.filter((entry) => entry.ok);
   const broken = entries.filter((entry) => !entry.ok);
 
   return (
-    <main className="mx-auto w-full max-w-4xl px-6 py-16">
-      <Link
-        href="/"
-        className="text-sm text-ink-500 underline-offset-4 hover:underline"
-      >
-        ← Dashboard
-      </Link>
-
-      <h1 className="mt-4 text-2xl font-semibold tracking-tight">
-        Mockup templates
-      </h1>
-      <p className="mt-2 max-w-2xl text-sm text-ink-600">
-        Room photos that posters are composited into. To add one, create a
-        folder under <code className="text-xs">mockup-templates/</code>, drop in
-        a <code className="text-xs">background.jpg</code>, and reload this page
-        — it will offer a corner picker to generate the JSON.
-      </p>
+    <main className="mx-auto w-full max-w-5xl px-6 py-8">
+      <PageHeader
+        title="Mockup templates"
+        meta="Room photos posters are composited into. Each one defines where a poster hangs, per print size."
+        actions={<NewTemplate />}
+      />
 
       {entries.length === 0 ? (
-        <p className="mt-8 rounded border border-paper-200 p-6 text-sm text-ink-500">
-          No templates yet. Create{" "}
-          <code className="text-xs">mockup-templates/my-room/background.jpg</code>{" "}
-          to get started.
-        </p>
+        <div className="mt-8">
+          <Empty title="No mockup templates yet">
+            Upload a room photo and drag a box onto the wall — that is the whole
+            setup. Posters are composited into it automatically after that.
+          </Empty>
+        </div>
       ) : null}
 
-      {usable.length > 0 ? (
-        <section className="mt-10">
-          <h2 className="text-xs font-medium uppercase tracking-widest text-ink-500">
-            Ready ({usable.length})
-          </h2>
-          <ul className="mt-4 grid gap-6 sm:grid-cols-2">
-            {usable.map((entry) => {
+      {ready.length > 0 ? (
+        <Section title={`Ready (${ready.length})`} className="mt-8">
+          <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {ready.map((entry) => {
               if (!entry.ok) return null;
               const t = entry.template;
               return (
-                <li
-                  key={t.id}
-                  className="overflow-hidden rounded-lg border border-paper-200"
-                >
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={`/api/templates/${t.id}/background`}
-                    alt={t.name}
-                    className="aspect-[4/3] w-full object-cover"
-                  />
-                  <div className="p-3">
-                    <p className="text-sm font-medium">{t.name}</p>
-                    <p className="mt-0.5 text-xs text-ink-500">
-                      {t.kind === "perspective" ? "Perspective" : "Flat"} ·{" "}
-                      {t.canvas.width}×{t.canvas.height} ·{" "}
-                      <code>{t.id}</code>
-                    </p>
-                  </div>
+                <li key={t.id}>
+                  <Link href={`/templates/${t.id}`}>
+                    <Card className="overflow-hidden transition-shadow hover:shadow-[--shadow-pop]">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={`/api/templates/${t.id}/background`}
+                        alt={t.name}
+                        className="aspect-[4/3] w-full object-cover"
+                      />
+                      <div className="p-3">
+                        <p className="truncate text-sm font-medium text-ink-900">
+                          {t.name}
+                        </p>
+                        <div className="mt-1.5 flex flex-wrap items-center gap-1">
+                          <Badge>
+                            {t.kind === "perspective" ? "Angled" : "Straight on"}
+                          </Badge>
+                          {t.sizing?.perSize ? (
+                            <Badge tone="accent">per size</Badge>
+                          ) : null}
+                        </div>
+                      </div>
+                    </Card>
+                  </Link>
                 </li>
               );
             })}
           </ul>
-        </section>
+        </Section>
       ) : null}
 
       {broken.length > 0 ? (
-        <section className="mt-10">
-          <h2 className="text-xs font-medium uppercase tracking-widest text-ink-500">
-            Needs attention ({broken.length})
-          </h2>
-          <ul className="mt-4 space-y-6">
+        <Section title={`Needs setting up (${broken.length})`} className="mt-8">
+          <ul className="space-y-3">
             {broken.map((entry) => {
               if (entry.ok) return null;
               return (
-                <li
-                  key={entry.id}
-                  className="rounded-lg border border-warn-500/30 p-4"
-                >
-                  <p className="text-sm font-medium">
-                    <code>{entry.id}</code>
-                  </p>
-                  <ul className="mt-1 space-y-0.5 text-xs text-warn-700">
-                    {entry.errors.map((error) => (
-                      <li key={error}>{error}</li>
-                    ))}
-                  </ul>
-                  {entry.hasBackground ? (
-                    <CornerPicker templateId={entry.id} />
-                  ) : null}
+                <li key={entry.id}>
+                  <Card className="border-warn-500/30 p-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="font-mono text-sm text-ink-900">
+                          {entry.id}
+                        </p>
+                        <ul className="mt-1 space-y-0.5 text-xs text-warn-700">
+                          {entry.errors.map((error) => (
+                            <li key={error}>{error}</li>
+                          ))}
+                        </ul>
+                      </div>
+                      {entry.hasBackground ? (
+                        <Link
+                          href={`/templates/${entry.id}`}
+                          className="shrink-0 rounded-md bg-accent-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-accent-700"
+                        >
+                          Set up
+                        </Link>
+                      ) : null}
+                    </div>
+                  </Card>
                 </li>
               );
             })}
           </ul>
-        </section>
+        </Section>
       ) : null}
     </main>
   );
