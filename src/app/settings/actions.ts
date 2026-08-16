@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 
-import { SIZE_IDS } from "@/lib/print/sizes";
+import { SIZE_IDS, SPLIT_SIZE_IDS } from "@/lib/print/sizes";
 import type { SizeId } from "@/lib/print/types";
 import { writeSettings } from "@/lib/pipeline/settings";
 
@@ -30,6 +30,16 @@ export async function saveSettings(
     compareAt[sizeId] = String(formData.get(`compare.${sizeId}`) ?? "");
   }
 
+  const splitPrices: Partial<Record<SizeId, string>> = {};
+  const splitCompareAt: Partial<Record<SizeId, string>> = {};
+
+  for (const sizeId of SPLIT_SIZE_IDS) {
+    splitPrices[sizeId] = String(formData.get(`splitPrice.${sizeId}`) ?? "");
+    splitCompareAt[sizeId] = String(
+      formData.get(`splitCompare.${sizeId}`) ?? "",
+    );
+  }
+
   // A range input posts tenths of a millimetre, so the slider can offer 0.1mm
   // steps without dealing in fractional form values.
   const rawMm = Number(formData.get("borderMm"));
@@ -40,7 +50,13 @@ export async function saveSettings(
 
   // writeSettings normalises and drops anything unparseable, so a blank field
   // clears that size's default rather than storing an empty string.
-  const saved = await writeSettings({ prices, compareAt, mockupBorder });
+  const saved = await writeSettings({
+    prices,
+    compareAt,
+    splitPrices,
+    splitCompareAt,
+    mockupBorder,
+  });
 
   // A value the user typed that did NOT survive normalisation was garbage.
   // Silently dropping it would leave them believing a price was saved.
@@ -48,14 +64,19 @@ export async function saveSettings(
     const typed = String(formData.get(`price.${sizeId}`) ?? "").trim();
     return typed !== "" && saved.prices[sizeId] === undefined;
   });
+  const rejectedSplit = SPLIT_SIZE_IDS.filter((sizeId) => {
+    const typed = String(formData.get(`splitPrice.${sizeId}`) ?? "").trim();
+    return typed !== "" && saved.splitPrices[sizeId] === undefined;
+  });
 
   revalidatePath("/settings");
   revalidatePath("/");
 
-  if (rejected.length > 0) {
+  if (rejected.length > 0 || rejectedSplit.length > 0) {
+    const bad = [...rejected, ...rejectedSplit.map((id) => `split ${id}`)];
     return {
       ok: false,
-      message: `Ignored an unreadable price for ${rejected.join(", ")}. Use digits only — e.g. 499 or 499.50.`,
+      message: `Ignored an unreadable price for ${bad.join(", ")}. Use digits only — e.g. 499 or 499.50.`,
     };
   }
 

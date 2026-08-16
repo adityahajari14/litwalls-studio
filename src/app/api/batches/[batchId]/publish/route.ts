@@ -73,6 +73,8 @@ export async function POST(
       batch,
       settingsPrices: settings.prices,
       settingsCompareAt: settings.compareAt,
+      settingsSplitPrices: settings.splitPrices,
+      settingsSplitCompareAt: settings.splitCompareAt,
       numberer,
       status,
     });

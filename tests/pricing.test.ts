@@ -3,6 +3,7 @@ import { test } from "node:test";
 
 import {
   FALLBACK_PRICES,
+  FALLBACK_SPLIT_PRICES,
   normalizePrice,
   normalizePriceTable,
   priceOrigin,
@@ -10,6 +11,7 @@ import {
   resolvePriceTable,
   validCompareAt,
 } from "../src/lib/print/pricing.ts";
+import { SPLIT_SIZE_IDS } from "../src/lib/print/sizes.ts";
 import { ensureCategoryTag } from "../src/lib/print/title.ts";
 import { MANUAL, MARVEL, MOVIES } from "./fixtures/categories.ts";
 
@@ -40,6 +42,26 @@ test("a size absent from a level falls through rather than blocking", () => {
   assert.equal(table.A5, "199.00");
   assert.equal(table.A4, "399.00");
   assert.equal(table["13x19"], FALLBACK_PRICES["13x19"]);
+});
+
+test("a split-3 size resolves against the split fallback, not the normal one", () => {
+  assert.equal(
+    resolvePrice("A4", {}, FALLBACK_SPLIT_PRICES),
+    FALLBACK_SPLIT_PRICES.A4,
+  );
+  assert.notEqual(FALLBACK_SPLIT_PRICES.A4, FALLBACK_PRICES.A4);
+});
+
+test("resolving a size the given fallback does not cover throws rather than lying", () => {
+  // A closed SizeId union means this can only happen from a caller mismatch —
+  // e.g. resolving "A5" against FALLBACK_SPLIT_PRICES, which does not have it
+  // on purpose. Silently returning something would sell split-3 A5 posters.
+  assert.throws(() => resolvePrice("A5", {}, FALLBACK_SPLIT_PRICES));
+});
+
+test("resolvePriceTable restricted to the split sizes never touches A5", () => {
+  const table = resolvePriceTable({}, SPLIT_SIZE_IDS, FALLBACK_SPLIT_PRICES);
+  assert.deepEqual(Object.keys(table).sort(), ["13x19", "A3", "A4"]);
 });
 
 test("priceOrigin reports which level supplied the value", () => {

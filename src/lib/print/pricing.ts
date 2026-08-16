@@ -43,12 +43,37 @@ export const FALLBACK_COMPARE_AT: PartialPriceTable = {
 };
 
 /**
+ * Split-3 placeholders. No A5 — split-3 does not sell at that size, see
+ * `SPLIT_SIZE_IDS`. Priced above a single sheet's fallback but below 3x it,
+ * matching how the storefront would frame a three-panel set: more than one
+ * poster, not three full-price ones.
+ */
+export const FALLBACK_SPLIT_PRICES: PartialPriceTable = {
+  A4: "1299.00",
+  A3: "1999.00",
+  "13x19": "2499.00",
+};
+
+export const FALLBACK_SPLIT_COMPARE_AT: PartialPriceTable = {
+  A4: "1999.00",
+  A3: "2999.00",
+  "13x19": "3499.00",
+};
+
+/**
  * Resolve one size's price through the override chain.
  *
  * Ordered most-specific first. `??` rather than `||` is deliberate: an empty
  * string is a *cleared* field and should fall through, but that is handled by
  * `normalizePriceTable` stripping blanks before they get here, so by this
  * point a present value is always a real one.
+ *
+ * `fallback` defaults to the normal 4-size table; a caller resolving a
+ * split-3 size passes `FALLBACK_SPLIT_PRICES` instead. Throwing on a genuinely
+ * missing entry — rather than returning something like "0.00" — is
+ * deliberate: `SizeId` is a closed union, so this can only fire from a caller
+ * mismatch (resolving "A5" against the split table), which is a bug worth
+ * surfacing loudly rather than quietly selling a poster for free.
  */
 export function resolvePrice(
   sizeId: SizeId,
@@ -57,24 +82,39 @@ export function resolvePrice(
     batch?: PartialPriceTable;
     settings?: PartialPriceTable;
   },
+  fallback: PartialPriceTable = FALLBACK_PRICES,
 ): string {
-  return (
+  const resolved =
     levels.job?.[sizeId] ??
     levels.batch?.[sizeId] ??
     levels.settings?.[sizeId] ??
-    FALLBACK_PRICES[sizeId]
-  );
+    fallback[sizeId];
+  if (resolved === undefined) {
+    throw new Error(`No fallback price configured for size "${sizeId}".`);
+  }
+  return resolved;
 }
 
-/** Resolve the whole table at once, for publishing. */
-export function resolvePriceTable(levels: {
-  job?: PartialPriceTable;
-  batch?: PartialPriceTable;
-  settings?: PartialPriceTable;
-}): PriceTable {
+/**
+ * Resolve a whole table at once, for publishing.
+ *
+ * `sizeIds` and `fallback` travel together — pass `SPLIT_SIZE_IDS` with
+ * `FALLBACK_SPLIT_PRICES` for a split-3 job, or leave both at their normal
+ * defaults. Passing one without the other would resolve a size against a
+ * fallback table that does not cover it, which `resolvePrice` treats as a bug.
+ */
+export function resolvePriceTable(
+  levels: {
+    job?: PartialPriceTable;
+    batch?: PartialPriceTable;
+    settings?: PartialPriceTable;
+  },
+  sizeIds: readonly SizeId[] = SIZE_IDS,
+  fallback: PartialPriceTable = FALLBACK_PRICES,
+): PriceTable {
   const out = {} as PriceTable;
-  for (const sizeId of SIZE_IDS) {
-    out[sizeId] = resolvePrice(sizeId, levels);
+  for (const sizeId of sizeIds) {
+    out[sizeId] = resolvePrice(sizeId, levels, fallback);
   }
   return out;
 }

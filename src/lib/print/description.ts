@@ -52,7 +52,7 @@ const SIZES_NORMAL = `<h5 style="text-align: left;"><strong>✔ Perfect Size for
 const SIZES_SPLIT = `<h5 style="text-align: left;"><strong>✔ A Three-Panel Set</strong></h5>
 <p><img height="400" width="400" alt="" src="https://cdn.shopify.com/s/files/1/0684/9826/0142/files/Product_description_02.webp?v=1756202904"></p>
 <p style="text-align: left;">This design is printed as a <strong>set of three panels</strong> that sit side by side to form one image. <strong>Every order includes all three panels.</strong></p>
-<p style="text-align: left;">Choose <strong>A5, A4, A3</strong> or <strong>13” x 19”</strong> above — the size you pick is the size of <em>each</em> panel, so the finished piece is three panels wide.</p>
+<p style="text-align: left;">Choose <strong>A4, A3</strong> or <strong>13” x 19”</strong> above — the size you pick is the size of <em>each</em> panel, so the finished piece is three panels wide.</p>
 <p style="text-align: left;"> </p>`;
 
 const OUTRO = `<h5 style="text-align: left;"><strong>✔ Elegant White Border</strong></h5>

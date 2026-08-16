@@ -1,6 +1,11 @@
 import { SettingsForm } from "@/app/settings/settings-form";
 import { PageHeader, Section } from "@/components/ui";
-import { FALLBACK_COMPARE_AT, FALLBACK_PRICES } from "@/lib/print/pricing";
+import {
+  FALLBACK_COMPARE_AT,
+  FALLBACK_PRICES,
+  FALLBACK_SPLIT_COMPARE_AT,
+  FALLBACK_SPLIT_PRICES,
+} from "@/lib/print/pricing";
 import { readSettings } from "@/lib/pipeline/settings";
 
 export const metadata = { title: "Settings · Litwalls Studio" };
@@ -21,8 +26,12 @@ export default async function SettingsPage() {
         <SettingsForm
           prices={settings.prices}
           compareAt={settings.compareAt}
+          splitPrices={settings.splitPrices}
+          splitCompareAt={settings.splitCompareAt}
           fallbackPrices={FALLBACK_PRICES}
           fallbackCompare={FALLBACK_COMPARE_AT}
+          fallbackSplitPrices={FALLBACK_SPLIT_PRICES}
+          fallbackSplitCompare={FALLBACK_SPLIT_COMPARE_AT}
           saved={settings.updatedAt > 0}
           border={settings.mockupBorder}
         />

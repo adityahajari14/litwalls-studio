@@ -8,9 +8,9 @@ import { RunButton } from "@/components/run-button";
 import { Badge, BackLink, PageHeader, Section } from "@/components/ui";
 import { hasReached } from "@/lib/print/types";
 import { listJobs, readBatch } from "@/lib/pipeline/store";
-import { resolvePriceTable } from "@/lib/print/pricing";
+import { FALLBACK_SPLIT_PRICES, resolvePriceTable } from "@/lib/print/pricing";
 import { readSettings } from "@/lib/pipeline/settings";
-import { SIZES } from "@/lib/print/sizes";
+import { sizeIdsFor, sizesFor } from "@/lib/print/sizes";
 
 export default async function BatchPage(
   props: PageProps<"/batches/[batchId]">,
@@ -26,11 +26,17 @@ export default async function BatchPage(
   ]);
 
   // What this batch will actually publish at: its own overrides on top of the
-  // dashboard defaults.
-  const prices = resolvePriceTable({
-    batch: batch.prices,
-    settings: settings.prices,
-  });
+  // dashboard defaults. Split-3 batches resolve against the split price table
+  // and its own fallback, and never touch A5 — it isn't a size split-3 sells.
+  const isSplit = batch.kind === "split3";
+  const prices = resolvePriceTable(
+    {
+      batch: batch.prices,
+      settings: isSplit ? settings.splitPrices : settings.prices,
+    },
+    sizeIdsFor(batch.kind),
+    isSplit ? FALLBACK_SPLIT_PRICES : undefined,
+  );
 
   const unprocessed = jobs.filter((job) => !hasReached(job.stage, "mocked"));
   const approved = jobs.filter(
@@ -49,9 +55,9 @@ export default async function BatchPage(
               {batch.kind === "split3" ? "Split — 3 panels" : "Single sheet"}
             </Badge>
             <span className="tnum text-ink-400">
-              {SIZES.map((size) => `${size.label} ₹${prices[size.id]}`).join(
-                " · ",
-              )}
+              {sizesFor(batch.kind)
+                .map((size) => `${size.label} ₹${prices[size.id]}`)
+                .join(" · ")}
             </span>
           </>
         }

@@ -47,6 +47,29 @@ export type PrintSize = (typeof SIZES)[number];
 
 export const SIZE_IDS = SIZES.map((s) => s.id) as readonly SizeId[];
 
+/**
+ * Split-3 posters are not sold at A5. A panel is a full sheet (see
+ * `targetPanelPixels`), so a "split A5" would be three 148mm-wide panels —
+ * a size nobody would print as a poster set. A5 is the one size split-3
+ * genuinely does not offer, not merely a size we discourage.
+ */
+export const SPLIT_SIZE_IDS: readonly SizeId[] = SIZE_IDS.filter(
+  (id) => id !== "A5",
+);
+export const SPLIT_SIZES: readonly PrintSize[] = SIZES.filter((size) =>
+  (SPLIT_SIZE_IDS as readonly string[]).includes(size.id),
+);
+
+/** The sizes actually offered for a poster of this format. */
+export function sizeIdsFor(kind: PosterKind): readonly SizeId[] {
+  return kind === "split3" ? SPLIT_SIZE_IDS : SIZE_IDS;
+}
+
+/** Same, as full size records — for anywhere a label or mm string is needed. */
+export function sizesFor(kind: PosterKind): readonly PrintSize[] {
+  return kind === "split3" ? SPLIT_SIZES : SIZES;
+}
+
 export function printSize(id: SizeId): PrintSize {
   const size = SIZES.find((s) => s.id === id);
   // A missing size is a programmer error, not a user-facing failure: SizeId is

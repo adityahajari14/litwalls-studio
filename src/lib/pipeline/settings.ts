@@ -5,6 +5,8 @@ import { readFile } from "node:fs/promises";
 import {
   FALLBACK_COMPARE_AT,
   FALLBACK_PRICES,
+  FALLBACK_SPLIT_COMPARE_AT,
+  FALLBACK_SPLIT_PRICES,
   normalizePriceTable,
   type PartialPriceTable,
 } from "@/lib/print/pricing";
@@ -24,6 +26,15 @@ export type Settings = {
   prices: PartialPriceTable;
   /** Default struck-through "was" price per size. */
   compareAt: PartialPriceTable;
+  /**
+   * Same, for split-3 posters. Kept separate rather than reusing `prices`
+   * because a three-panel set is a different product from a single sheet at
+   * the same nominal size — pricing it the same would either undersell the
+   * set or oversell the sheet. Never has an "A5" entry: split-3 does not sell
+   * at that size (see `SPLIT_SIZE_IDS`).
+   */
+  splitPrices: PartialPriceTable;
+  splitCompareAt: PartialPriceTable;
   /**
    * Whether mockups show the white border the printer adds.
    *
@@ -51,6 +62,8 @@ export const MAX_BORDER_MM = 8;
 export const DEFAULT_SETTINGS: Settings = {
   prices: { ...FALLBACK_PRICES },
   compareAt: { ...FALLBACK_COMPARE_AT },
+  splitPrices: { ...FALLBACK_SPLIT_PRICES },
+  splitCompareAt: { ...FALLBACK_SPLIT_COMPARE_AT },
   // On by default: the border is part of the product, so a mockup without it
   // shows something the customer will not receive.
   mockupBorder: { enabled: true, mm: TRUE_BORDER_MM },
@@ -80,6 +93,8 @@ export async function readSettings(): Promise<Settings> {
       // hand-editable, so it may contain whatever a person typed into it.
       prices: normalizePriceTable(parsed.prices ?? {}),
       compareAt: normalizePriceTable(parsed.compareAt ?? {}),
+      splitPrices: normalizePriceTable(parsed.splitPrices ?? {}),
+      splitCompareAt: normalizePriceTable(parsed.splitCompareAt ?? {}),
       mockupBorder: normalizeBorder(parsed.mockupBorder),
       updatedAt: typeof parsed.updatedAt === "number" ? parsed.updatedAt : 0,
     };
@@ -93,11 +108,14 @@ export async function readSettings(): Promise<Settings> {
 }
 
 export async function writeSettings(
-  update: Pick<Settings, "prices" | "compareAt"> & Partial<Pick<Settings, "mockupBorder">>,
+  update: Pick<Settings, "prices" | "compareAt" | "splitPrices" | "splitCompareAt"> &
+    Partial<Pick<Settings, "mockupBorder">>,
 ): Promise<Settings> {
   const settings: Settings = {
     prices: normalizePriceTable(update.prices),
     compareAt: normalizePriceTable(update.compareAt),
+    splitPrices: normalizePriceTable(update.splitPrices),
+    splitCompareAt: normalizePriceTable(update.splitCompareAt),
     mockupBorder: normalizeBorder(update.mockupBorder),
     updatedAt: Date.now(),
   };

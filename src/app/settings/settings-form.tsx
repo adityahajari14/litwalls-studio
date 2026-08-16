@@ -5,20 +5,29 @@ import { useActionState, useState } from "react";
 import { saveSettings, type SaveState } from "@/app/settings/actions";
 import { PriceTable } from "@/components/price-table";
 import { Button } from "@/components/ui";
+import { SPLIT_SIZES } from "@/lib/print/sizes";
 import type { PartialPriceTable, PriceTable as Prices } from "@/lib/print/pricing";
 
 export function SettingsForm({
   prices,
   compareAt,
+  splitPrices,
+  splitCompareAt,
   fallbackPrices,
   fallbackCompare,
+  fallbackSplitPrices,
+  fallbackSplitCompare,
   saved,
   border,
 }: {
   prices: PartialPriceTable;
   compareAt: PartialPriceTable;
+  splitPrices: PartialPriceTable;
+  splitCompareAt: PartialPriceTable;
   fallbackPrices: Prices;
   fallbackCompare: PartialPriceTable;
+  fallbackSplitPrices: PartialPriceTable;
+  fallbackSplitCompare: PartialPriceTable;
   saved: boolean;
   border: { enabled: boolean; mm: number };
 }) {
@@ -44,6 +53,27 @@ export function SettingsForm({
         inheritedCompare={fallbackCompare}
         emptyMeans="Leave a field blank to fall back to the built-in placeholder shown in grey."
       />
+
+      <div className="mt-8 border-t border-paper-300 pt-6">
+        <h3 className="text-sm font-medium text-ink-700">
+          Default prices — split-3 sets
+        </h3>
+        <p className="mt-1 mb-3 text-xs text-ink-400">
+          Applied to every new split-3 product. No A5 — a three-panel set
+          isn&rsquo;t sold at that size.
+        </p>
+
+        <PriceTable
+          sizes={SPLIT_SIZES}
+          pricePrefix="splitPrice"
+          comparePrefix="splitCompare"
+          values={splitPrices}
+          compareValues={splitCompareAt}
+          inherited={fallbackSplitPrices}
+          inheritedCompare={fallbackSplitCompare}
+          emptyMeans="Leave a field blank to fall back to the built-in placeholder shown in grey."
+        />
+      </div>
 
       <div className="mt-8 border-t border-paper-300 pt-6">
         <h3 className="text-sm font-medium text-ink-700">

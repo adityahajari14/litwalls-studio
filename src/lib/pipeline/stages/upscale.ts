@@ -5,7 +5,7 @@ import sharp from "sharp";
 
 import { jobAsset } from "@/lib/pipeline/paths";
 import { coverageFor, dpiBySize } from "@/lib/pipeline/stages/probe";
-import { DPI_FLOOR, SIZE_IDS } from "@/lib/print/sizes";
+import { DPI_FLOOR, sizeIdsFor } from "@/lib/print/sizes";
 import type { PosterJob, ProbeResult } from "@/lib/print/types";
 
 /** Everything downstream reads this, upscaled or not, so there is one input path. */
@@ -61,7 +61,9 @@ export async function upscale(job: PosterJob): Promise<ProbeResult> {
 
   // Scale needed to bring the weakest size up to the floor. Split posters
   // measure per-panel, which dpiBySize already accounts for.
-  const worstDpi = Math.min(...SIZE_IDS.map((id) => job.probe!.dpiBySize[id]));
+  const worstDpi = Math.min(
+    ...sizeIdsFor(job.kind).map((id) => job.probe!.dpiBySize[id]),
+  );
   const needed = worstDpi >= DPI_FLOOR ? 1 : DPI_FLOOR / worstDpi;
   const scale = Math.min(needed, MAX_SCALE);
 

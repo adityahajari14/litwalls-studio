@@ -80,11 +80,19 @@ test("SEO title stays within Google's truncation point", () => {
 test("SEO description lists every size, not just 13x19", () => {
   // The live template hardcodes 13" x 19" as the only size, which stopped
   // being true the moment four sizes shipped.
-  const description = seoDescriptionFor("Spider Man");
+  const description = seoDescriptionFor("Spider Man", "normal");
   for (const size of ["A5", "A4", "A3"]) {
     assert.ok(description.includes(size), `missing ${size}: ${description}`);
   }
   assert.ok(description.includes("Spider Man"));
+});
+
+test("a split-3 SEO description never mentions A5", () => {
+  const description = seoDescriptionFor("Spider Man", "split3");
+  assert.ok(!description.includes("A5"), `should not offer A5: ${description}`);
+  for (const size of ["A4", "A3"]) {
+    assert.ok(description.includes(size), `missing ${size}: ${description}`);
+  }
 });
 
 test("a manual collection adds no tag", () => {

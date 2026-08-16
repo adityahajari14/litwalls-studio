@@ -2,7 +2,7 @@ import "server-only";
 
 import { assemblePanels, composeMockup } from "@/lib/image/compose";
 import { ensureDir, jobAsset, jobDir } from "@/lib/pipeline/paths";
-import { SIZE_IDS } from "@/lib/print/sizes";
+import { sizeIdsFor } from "@/lib/print/sizes";
 import { isPerSize, referenceSizeOf } from "@/lib/templates/placement";
 import { DEFAULT_PANEL_GAP } from "@/lib/templates/schema";
 import { usableTemplates } from "@/lib/templates/load";
@@ -69,7 +69,7 @@ export async function renderMockups(job: PosterJob): Promise<RenderedMockup[]> {
     // a single shared image — four times the renders is not worth paying on
     // every template when most look identical across sizes.
     const sizes = isPerSize(template)
-      ? SIZE_IDS
+      ? sizeIdsFor(job.kind)
       : ([referenceSizeOf(template)] as const);
 
     for (const sizeId of sizes) {

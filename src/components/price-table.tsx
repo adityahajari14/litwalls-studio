@@ -1,8 +1,9 @@
-import { SIZES } from "@/lib/print/sizes";
+import { SIZES, type PrintSize } from "@/lib/print/sizes";
 import type { PartialPriceTable, PriceOrigin } from "@/lib/print/pricing";
 
 /**
- * Price inputs for all four sizes.
+ * Price inputs for a set of sizes — every size by default, or a restricted
+ * list (split-3 posters, which do not sell at A5).
  *
  * Used at all three levels of the override chain — dashboard settings, batch
  * creation, and a single poster's review screen — because the levels differ
@@ -12,8 +13,16 @@ import type { PartialPriceTable, PriceOrigin } from "@/lib/print/pricing";
  * `inherited` supplies the placeholder: an empty field shows the value that
  * would be used instead, so "blank means inherit" is visible rather than
  * something the user has to be told.
+ *
+ * `pricePrefix`/`comparePrefix` name the form fields. Two tables never share
+ * one `<form>` under the same names — the settings page renders a normal
+ * table and a split-3 table together, and matching `name` attributes would
+ * make the second silently overwrite the first in FormData.
  */
 export function PriceTable({
+  sizes = SIZES,
+  pricePrefix = "price",
+  comparePrefix = "compare",
   values,
   compareValues,
   inherited,
@@ -21,10 +30,14 @@ export function PriceTable({
   origins,
   emptyMeans,
 }: {
+  sizes?: readonly PrintSize[];
+  pricePrefix?: string;
+  comparePrefix?: string;
   values: PartialPriceTable;
   compareValues: PartialPriceTable;
-  /** What each size resolves to when this level leaves it blank. */
-  inherited: Record<string, string>;
+  /** What each size resolves to when this level leaves it blank. Partial
+   *  because the split-3 table genuinely has nothing for A5. */
+  inherited: PartialPriceTable;
   inheritedCompare?: PartialPriceTable;
   /** Where each resolved value currently comes from, for the hint column. */
   origins?: Record<string, PriceOrigin>;
@@ -42,7 +55,7 @@ export function PriceTable({
           </tr>
         </thead>
         <tbody>
-          {SIZES.map((size) => (
+          {sizes.map((size) => (
             <tr
               key={size.id}
               className="border-t border-paper-200/70"
@@ -52,7 +65,7 @@ export function PriceTable({
                 <input
                   type="text"
                   inputMode="decimal"
-                  name={`price.${size.id}`}
+                  name={`${pricePrefix}.${size.id}`}
                   defaultValue={values[size.id] ?? ""}
                   placeholder={inherited[size.id]}
                   className="w-28 rounded border border-paper-300 bg-transparent px-2 py-1 tabular-nums"
@@ -62,7 +75,7 @@ export function PriceTable({
                 <input
                   type="text"
                   inputMode="decimal"
-                  name={`compare.${size.id}`}
+                  name={`${comparePrefix}.${size.id}`}
                   defaultValue={compareValues[size.id] ?? ""}
                   placeholder={inheritedCompare?.[size.id] ?? "—"}
                   className="w-28 rounded border border-paper-300 bg-transparent px-2 py-1 tabular-nums"

@@ -5,8 +5,12 @@ import { readFile } from "node:fs/promises";
 import { stageLibraryImage } from "@/lib/library/media";
 import { jobAsset } from "@/lib/pipeline/paths";
 import { descriptionFor } from "@/lib/print/description";
-import { resolvePriceTable, validCompareAt } from "@/lib/print/pricing";
-import { SIZES } from "@/lib/print/sizes";
+import {
+  FALLBACK_SPLIT_PRICES,
+  resolvePriceTable,
+  validCompareAt,
+} from "@/lib/print/pricing";
+import { SIZES, sizeIdsFor, sizesFor } from "@/lib/print/sizes";
 import {
   seoDescriptionFor,
   seoTitleFor,
@@ -213,11 +217,19 @@ export async function publishJob(options: {
   batch: Batch;
   settingsPrices: Partial<Record<SizeId, string>>;
   settingsCompareAt: Partial<Record<SizeId, string>>;
+  /** Dashboard defaults for split-3 posters — a different product from a
+   *  single sheet at the same nominal size, priced separately. */
+  settingsSplitPrices: Partial<Record<SizeId, string>>;
+  settingsSplitCompareAt: Partial<Record<SizeId, string>>;
   numberer: Numberer;
   /** DRAFT keeps it out of the storefront until variants are supported. */
   status?: "ACTIVE" | "DRAFT";
 }): Promise<Result<ShopifyRefs>> {
   const { job, batch, numberer } = options;
+  const isSplit = job.kind === "split3";
+  // Split-3 does not sell at A5 — three 148mm-wide panels is not a product —
+  // so every size-driven step below iterates this rather than the full list.
+  const sizes = sizesFor(job.kind);
 
   const subject = job.metadata?.subject?.trim();
   if (!subject) return err("Set a subject before publishing.");
@@ -232,22 +244,32 @@ export async function publishJob(options: {
     batch.category,
   );
 
-  const prices = resolvePriceTable({
-    job: job.priceOverrides,
-    batch: batch.prices,
-    settings: options.settingsPrices,
-  });
-  const compareAt = resolvePriceTable({
-    job: job.compareAtOverrides,
-    batch: batch.compareAt,
-    settings: options.settingsCompareAt,
-  });
+  const prices = resolvePriceTable(
+    {
+      job: job.priceOverrides,
+      batch: batch.prices,
+      settings: isSplit ? options.settingsSplitPrices : options.settingsPrices,
+    },
+    sizeIdsFor(job.kind),
+    isSplit ? FALLBACK_SPLIT_PRICES : undefined,
+  );
+  const compareAt = resolvePriceTable(
+    {
+      job: job.compareAtOverrides,
+      batch: batch.compareAt,
+      settings: isSplit
+        ? options.settingsSplitCompareAt
+        : options.settingsCompareAt,
+    },
+    sizeIdsFor(job.kind),
+    isSplit ? FALLBACK_SPLIT_PRICES : undefined,
+  );
 
   try {
     // Staged in parallel: independent uploads that do not depend on each
     // other, and doing them in sequence multiplies the wait for no benefit.
     const staged = await Promise.all(
-      SIZES.map(async (size) => {
+      sizes.map(async (size) => {
         const asset = mediaFor(job, size.id);
         if (!asset) return null;
         const alt = job.metadata?.altText || `${subject} — ${size.label}`;
@@ -268,7 +290,7 @@ export async function publishJob(options: {
     // at the last step.
     const gallery = await stageGallery(job, subject);
 
-    const variants = SIZES.map((size) => {
+    const variants = sizes.map((size) => {
       const file = staged.find((s) => s?.sizeId === size.id)?.file;
       const price = prices[size.id];
       return {
@@ -354,12 +376,12 @@ export async function publishJob(options: {
         // Posters", where the "#06" is meaningless to a shopper.
         seo: {
           title: seoTitleFor({ subject, category: batch.category }),
-          description: seoDescriptionFor(subject),
+          description: seoDescriptionFor(subject, job.kind),
         },
         productOptions: [
           {
             name: "Size",
-            values: SIZES.map((size) => ({ name: size.label })),
+            values: sizes.map((size) => ({ name: size.label })),
           },
         ],
         files,

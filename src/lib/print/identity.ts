@@ -1,5 +1,5 @@
-import { SIZES } from "@/lib/print/sizes";
-import type { Category, SizeId } from "@/lib/print/types";
+import { sizesFor } from "@/lib/print/sizes";
+import type { Category, PosterKind, SizeId } from "@/lib/print/types";
 
 /**
  * Product identity fields: SKU and SEO.
@@ -71,9 +71,15 @@ function code(value: string, max: number): string {
  *
  * Kept under ~160 characters where possible: Google truncates beyond that, and
  * a description cut mid-sentence in the SERP looks careless.
+ *
+ * `kind` selects the size list — a split-3 product does not sell at A5, and
+ * claiming it does in a search snippet is exactly the kind of thing that
+ * ends up disputed after the fact.
  */
-export function seoDescriptionFor(subject: string): string {
-  const sizes = SIZES.map((s) => s.label).join(", ");
+export function seoDescriptionFor(subject: string, kind: PosterKind): string {
+  const sizes = sizesFor(kind)
+    .map((s) => s.label)
+    .join(", ");
   return (
     `${subject} poster from Litwalls — available in ${sizes}. ` +
     `300 GSM glossy, fade-resistant inks, elegant white border. Free shipping over ₹499.`

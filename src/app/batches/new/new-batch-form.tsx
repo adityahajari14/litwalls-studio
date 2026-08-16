@@ -5,15 +5,20 @@ import { useEffect, useState } from "react";
 
 import { PriceTable } from "@/components/price-table";
 import { Button, Field, Input } from "@/components/ui";
+import { sizesFor } from "@/lib/print/sizes";
 import type { PartialPriceTable, PriceTable as Prices } from "@/lib/print/pricing";
 import type { Category, PosterKind } from "@/lib/print/types";
 
 export function NewBatchForm({
   inheritedPrices,
   inheritedCompare,
+  inheritedSplitPrices,
+  inheritedSplitCompare,
 }: {
   inheritedPrices: Prices;
   inheritedCompare: PartialPriceTable;
+  inheritedSplitPrices: PartialPriceTable;
+  inheritedSplitCompare: PartialPriceTable;
 }) {
   const router = useRouter();
   // null while loading — distinct from an empty list, which means Shopify has
@@ -188,10 +193,13 @@ export function NewBatchForm({
         <h2 className="text-sm font-medium">Prices for this batch</h2>
         <div className="mt-2">
           <PriceTable
+            sizes={sizesFor(kind)}
             values={{}}
             compareValues={{}}
-            inherited={inheritedPrices}
-            inheritedCompare={inheritedCompare}
+            inherited={kind === "split3" ? inheritedSplitPrices : inheritedPrices}
+            inheritedCompare={
+              kind === "split3" ? inheritedSplitCompare : inheritedCompare
+            }
             emptyMeans="Leave blank to use the dashboard default shown in grey. Individual posters can still override these."
           />
         </div>

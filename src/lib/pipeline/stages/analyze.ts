@@ -13,7 +13,7 @@ import { readBatch } from "@/lib/pipeline/store";
 import { fetchCatalogue } from "@/lib/shopify/numbering";
 import { fetchCategories } from "@/lib/shopify/collections";
 import { parseTitle } from "@/lib/print/title";
-import { cropAspectFor, SIZES } from "@/lib/print/sizes";
+import { cropAspectFor, sizesFor } from "@/lib/print/sizes";
 import type {
   AiMetadata,
   FocalPoint,
@@ -129,7 +129,7 @@ async function reframeSizes(
   const out: NonNullable<PosterJob["aiCrops"]> = {};
   const byAspect = new Map<string, { rect: NormRect; reason: string }>();
 
-  for (const size of SIZES) {
+  for (const size of sizesFor(job.kind)) {
     const targetAspect = cropAspectFor(size.id, job.kind);
     if (!needsReframe(sourceAspect, targetAspect)) continue;
 

@@ -13,7 +13,7 @@ import {
   DPI_FLOOR,
   isLowRes,
   printDpi,
-  SIZE_IDS,
+  sizeIdsFor,
   targetPanelPixels,
   targetPixels,
 } from "@/lib/print/sizes";
@@ -121,7 +121,7 @@ export async function cropAll(job: PosterJob): Promise<RenderedAsset[]> {
 
   const assets: RenderedAsset[] = [];
 
-  for (const sizeId of SIZE_IDS) {
+  for (const sizeId of sizeIdsFor(job.kind)) {
     const region = cropForSize(job, sizeId, source);
 
     if (job.kind === "split3") {
@@ -192,7 +192,7 @@ export async function cropAll(job: PosterJob): Promise<RenderedAsset[]> {
 
 /** Sizes whose rendered files are stale because the crop changed. */
 export function staleSizes(job: PosterJob): SizeId[] {
-  return SIZE_IDS.filter((sizeId) => {
+  return sizeIdsFor(job.kind).filter((sizeId) => {
     const rendered = job.assets.filter((a) => a.sizeId === sizeId);
     if (rendered.length === 0) return true;
 

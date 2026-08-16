@@ -18,7 +18,7 @@ import {
   Segmented,
   Textarea,
 } from "@/components/ui";
-import { SIZES } from "@/lib/print/sizes";
+import { sizesFor } from "@/lib/print/sizes";
 import { formatTitle } from "@/lib/print/title";
 import type { PartialPriceTable, PriceTable as Prices } from "@/lib/print/pricing";
 import type {
@@ -348,7 +348,10 @@ export function ReviewScreen({
                   size="sm"
                   value={sizeId}
                   onChange={setSizeId}
-                  options={SIZES.map((s) => ({ value: s.id, label: s.label }))}
+                  options={sizesFor(job.kind).map((s) => ({
+                    value: s.id,
+                    label: s.label,
+                  }))}
                 />
               </span>
             }
@@ -490,6 +493,7 @@ export function ReviewScreen({
 
           <Section title="Prices">
             <PriceTable
+              sizes={sizesFor(job.kind)}
               values={job.priceOverrides}
               compareValues={job.compareAtOverrides}
               inherited={inheritedPrices}

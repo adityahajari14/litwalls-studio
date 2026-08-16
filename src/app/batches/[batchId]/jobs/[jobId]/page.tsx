@@ -4,7 +4,8 @@ import { ReviewScreen } from "@/app/batches/[batchId]/jobs/[jobId]/review-screen
 import { loadLibrary } from "@/lib/library/load";
 import { listJobs, readBatch, readJob } from "@/lib/pipeline/store";
 import { readSettings } from "@/lib/pipeline/settings";
-import { resolvePriceTable } from "@/lib/print/pricing";
+import { FALLBACK_SPLIT_PRICES, resolvePriceTable } from "@/lib/print/pricing";
+import { sizeIdsFor } from "@/lib/print/sizes";
 import { usableTemplates } from "@/lib/templates/load";
 
 export default async function JobPage(
@@ -27,10 +28,15 @@ export default async function JobPage(
 
   // What this poster would publish at with no per-poster override — shown as
   // the placeholder so "blank means inherit" is visible rather than explained.
-  const inherited = resolvePriceTable({
-    batch: batch.prices,
-    settings: settings.prices,
-  });
+  const isSplit = job.kind === "split3";
+  const inherited = resolvePriceTable(
+    {
+      batch: batch.prices,
+      settings: isSplit ? settings.splitPrices : settings.prices,
+    },
+    sizeIdsFor(job.kind),
+    isSplit ? FALLBACK_SPLIT_PRICES : undefined,
+  );
 
   // Only posters that have something to review can be stepped through, so
   // prev/next never lands on a blank screen.
@@ -42,7 +48,10 @@ export default async function JobPage(
       batch={batch}
       job={job}
       inheritedPrices={inherited}
-      inheritedCompare={{ ...settings.compareAt, ...batch.compareAt }}
+      inheritedCompare={{
+        ...(isSplit ? settings.splitCompareAt : settings.compareAt),
+        ...batch.compareAt,
+      }}
       templates={templates.map((t) => ({ id: t.id, name: t.name }))}
       library={library.map((image) => ({
         id: image.id,

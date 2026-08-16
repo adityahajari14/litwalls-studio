@@ -10,6 +10,9 @@ import {
   isUnprintable,
   printSize,
   SIZE_IDS,
+  sizeIdsFor,
+  SPLIT_SIZE_IDS,
+  sizesFor,
   targetPanelPixels,
   targetPixels,
 } from "../src/lib/print/sizes.ts";
@@ -17,6 +20,19 @@ import { panelRects, seamPositions } from "../src/lib/print/split.ts";
 
 test("all four sizes are present", () => {
   assert.deepEqual([...SIZE_IDS], ["A5", "A4", "A3", "13x19"]);
+});
+
+test("split-3 offers three sizes, never A5", () => {
+  assert.deepEqual([...SPLIT_SIZE_IDS], ["A4", "A3", "13x19"]);
+  assert.deepEqual([...sizeIdsFor("split3")], ["A4", "A3", "13x19"]);
+  assert.deepEqual(
+    sizesFor("split3").map((s) => s.id),
+    ["A4", "A3", "13x19"],
+  );
+});
+
+test("a normal poster still offers every size", () => {
+  assert.deepEqual([...sizeIdsFor("normal")], [...SIZE_IDS]);
 });
 
 test("A-series sizes share the same aspect ratio", () => {

@@ -10,7 +10,7 @@ import {
   cropAspectFor,
   DPI_FLOOR,
   dpiFor,
-  SIZE_IDS,
+  sizeIdsFor,
   targetPanelPixels,
 } from "@/lib/print/sizes";
 import type { PosterJob, ProbeResult, SizeId } from "@/lib/print/types";
@@ -79,7 +79,7 @@ export function coverageFor(
   const sourceAspect = px.width / px.height;
   let worst = 1;
 
-  for (const sizeId of SIZE_IDS) {
+  for (const sizeId of sizeIdsFor(kind)) {
     const target = cropAspectFor(sizeId, kind);
     // The largest rect of `target` aspect inside the source keeps this
     // fraction of the total area — one edge is always fully used.
@@ -105,7 +105,7 @@ export function dpiBySize(
 ): Record<SizeId, number> {
   const out = {} as Record<SizeId, number>;
 
-  for (const sizeId of SIZE_IDS) {
+  for (const sizeId of sizeIdsFor(kind)) {
     if (kind === "split3") {
       // Each panel is a FULL sheet fed by only a third of the source's width,
       // so a split set needs roughly three times the horizontal resolution of
