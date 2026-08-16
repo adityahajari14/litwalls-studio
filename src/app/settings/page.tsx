@@ -12,16 +12,19 @@ export default async function SettingsPage() {
     <main className="mx-auto w-full max-w-2xl px-6 py-8">
       <PageHeader
         title="Settings"
-        meta="Default prices for every new product. A batch can override these at upload, and a single poster can override its batch."
+        meta="Defaults for every new product. A batch can override these at upload, and a single poster can override its batch."
       />
 
-      <Section title="Default prices" className="mt-8">
+      {/* One Section, because it is one form with one submit — the headings
+          inside separate prices from the mockup border. */}
+      <Section title="Defaults" className="mt-8">
         <SettingsForm
           prices={settings.prices}
           compareAt={settings.compareAt}
           fallbackPrices={FALLBACK_PRICES}
           fallbackCompare={FALLBACK_COMPARE_AT}
           saved={settings.updatedAt > 0}
+          border={settings.mockupBorder}
         />
       </Section>
     </main>

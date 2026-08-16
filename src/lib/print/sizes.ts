@@ -18,9 +18,9 @@ import type { NormRect, PosterKind, SizeId } from "@/lib/print/types";
  * ─────────────────────────────────────────────────────────────────────────
  */
 const MIRRORED_SIZES = [
-  { id: "A5", label: "A5", mm: "148 × 210 mm", minWidth: 1748, minHeight: 2480 },
-  { id: "A4", label: "A4", mm: "210 × 297 mm", minWidth: 2480, minHeight: 3508 },
-  { id: "A3", label: "A3", mm: "297 × 420 mm", minWidth: 3508, minHeight: 4961 },
+  { id: "A5", label: "A5", mm: "148 × 210 mm", widthMm: 148, heightMm: 210, minWidth: 1748, minHeight: 2480 },
+  { id: "A4", label: "A4", mm: "210 × 297 mm", widthMm: 210, heightMm: 297, minWidth: 2480, minHeight: 3508 },
+  { id: "A3", label: "A3", mm: "297 × 420 mm", widthMm: 297, heightMm: 420, minWidth: 3508, minHeight: 4961 },
 ] as const;
 
 /**
@@ -35,6 +35,8 @@ const SUPER_B = {
   id: "13x19",
   label: '13" × 19"',
   mm: "330 × 483 mm",
+  widthMm: 330,
+  heightMm: 483,
   minWidth: 3250,
   minHeight: 4750,
 } as const;
@@ -157,6 +159,29 @@ export function targetPanelPixels(sizeId: SizeId): {
 export function cropAspectFor(sizeId: SizeId, kind: PosterKind): number {
   const aspect = aspectFor(sizeId);
   return kind === "split3" ? aspect * 3 : aspect;
+}
+
+/**
+ * The density a rendered file for this size ACTUALLY has.
+ *
+ * Computed from its pixel dimensions against its real physical size, not from
+ * DPI_FLOOR. Those are different numbers: the A-series pixel dimensions work
+ * out to 300dpi while DPI_FLOOR is 250, and 13x19 genuinely is 250.
+ *
+ * Tagging every file with a flat 250 — which an earlier version of this did —
+ * tells a printer that a 3508px A3 is 356mm wide instead of 297mm. It would
+ * print 20% oversized, and unlike an obviously-wrong 72dpi tag, 250 looks
+ * plausible enough to slip through.
+ */
+export function printDpi(sizeId: SizeId): number {
+  const size = printSize(sizeId);
+  return Math.round(size.minWidth / (size.widthMm / 25.4));
+}
+
+/** Millimetres converted to pixels at a size's real print density. */
+export function mmToPixels(sizeId: SizeId, mm: number): number {
+  const size = printSize(sizeId);
+  return Math.round((mm / size.widthMm) * size.minWidth);
 }
 
 /** Whether a rendered asset is below the soft floor. */

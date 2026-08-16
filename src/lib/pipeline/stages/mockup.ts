@@ -6,6 +6,7 @@ import { SIZE_IDS } from "@/lib/print/sizes";
 import { isPerSize, referenceSizeOf } from "@/lib/templates/placement";
 import { DEFAULT_PANEL_GAP } from "@/lib/templates/schema";
 import { usableTemplates } from "@/lib/templates/load";
+import { readSettings } from "@/lib/pipeline/settings";
 import type { MockupTemplate, PosterJob, RenderedMockup } from "@/lib/print/types";
 
 /**
@@ -30,6 +31,10 @@ const AUTO_TEMPLATE_LIMIT = 3;
 
 export async function renderMockups(job: PosterJob): Promise<RenderedMockup[]> {
   const templates = await usableTemplates();
+  // The printer puts a white edge on every poster, so the mockup shows one too
+  // unless it is turned off. Read once per job rather than per template.
+  const { mockupBorder } = await readSettings();
+  const borderMm = mockupBorder.enabled ? mockupBorder.mm : 0;
   if (templates.length === 0) return [];
 
   const chosen =
@@ -48,7 +53,7 @@ export async function renderMockups(job: PosterJob): Promise<RenderedMockup[]> {
   const posterFor = async (template: MockupTemplate) => {
     const gap = job.kind === "split3" ? (template.panelGap ?? DEFAULT_PANEL_GAP) : 0;
     if (!assembled.has(gap)) {
-      assembled.set(gap, await buildPoster(job, gap));
+      assembled.set(gap, await buildPoster(job, gap, borderMm));
     }
     return assembled.get(gap) ?? null;
   };
@@ -78,6 +83,10 @@ export async function renderMockups(job: PosterJob): Promise<RenderedMockup[]> {
           template,
           poster,
           sizeId,
+          borderMm,
+          // A split set was bordered per panel during assembly; bordering the
+          // assembled strip again would draw an edge that does not exist.
+          preBordered: job.kind === "split3",
           outPath: jobAsset(job.batchId, job.id, relPath),
         });
         rendered.push({
@@ -110,6 +119,7 @@ export async function renderMockups(job: PosterJob): Promise<RenderedMockup[]> {
 async function buildPoster(
   job: PosterJob,
   gapPercent: number,
+  borderMm: number,
 ): Promise<string | Buffer | null> {
   if (job.kind === "split3") {
     const panels = job.assets
@@ -121,6 +131,7 @@ async function buildPoster(
     return assemblePanels(
       panels.map((p) => jobAsset(job.batchId, job.id, p.relPath)),
       gapPercent,
+      borderMm > 0 ? { mm: borderMm, sizeId: MOCKUP_SOURCE_SIZE } : undefined,
     );
   }
 

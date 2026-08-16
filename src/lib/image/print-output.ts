@@ -2,7 +2,6 @@ import "server-only";
 
 import type { Sharp } from "sharp";
 
-import { DPI_FLOOR } from "@/lib/print/sizes";
 
 /**
  * How a print-ready file is finished.
@@ -45,12 +44,16 @@ const SHARPEN = { sigma: 0.7, m1: 0.4, m2: 0.9 } as const;
  */
 export function finishPrintFile(
   pipeline: Sharp,
-  options: { sharpen?: boolean } = {},
+  options: { density: number; sharpen?: boolean },
 ): Sharp {
   const sharpened =
     options.sharpen === false ? pipeline : pipeline.sharpen(SHARPEN);
 
-  return sharpened.withMetadata({ density: DPI_FLOOR });
+  // The density MUST be the file's real one, computed from its pixels against
+  // its physical size — see printDpi(). A flat constant tells the printer the
+  // wrong physical size, and being plausibly wrong is worse than obviously
+  // wrong because nothing flags it.
+  return sharpened.withMetadata({ density: options.density });
 }
 
 /**

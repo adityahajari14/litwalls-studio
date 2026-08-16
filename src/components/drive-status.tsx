@@ -1,4 +1,4 @@
-import { ButtonLink, Card } from "@/components/ui";
+import { ButtonAnchor, Card } from "@/components/ui";
 import { driveConfigured, driveConnected } from "@/lib/drive/auth";
 
 /**
@@ -35,9 +35,9 @@ export async function DriveStatus() {
         <p className="text-sm text-warn-700">
           Google Drive is not connected — print files cannot be filed yet.
         </p>
-        <ButtonLink href="/api/drive/connect" variant="primary" size="sm">
+        <ButtonAnchor href="/api/drive/connect" variant="primary" size="sm">
           Connect Drive
-        </ButtonLink>
+        </ButtonAnchor>
       </Card>
     );
   }

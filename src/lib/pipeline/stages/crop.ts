@@ -12,6 +12,7 @@ import {
   cropAspectFor,
   DPI_FLOOR,
   isLowRes,
+  printDpi,
   SIZE_IDS,
   targetPanelPixels,
   targetPixels,
@@ -74,6 +75,8 @@ async function renderOne(options: {
   region: NormRect;
   source: { width: number; height: number };
   target: { width: number; height: number };
+  /** The file's real print density, for the JPEG density tag. */
+  density: number;
 }): Promise<{ width: number; height: number; bytes: number }> {
   const px = toPixelRect(options.region, options.source);
 
@@ -91,7 +94,7 @@ async function renderOne(options: {
 
   // Sharpen, tag the real print density and keep the colour profile. Without
   // this the file left here claiming 72dpi with its ICC profile discarded.
-  await finishPrintFile(rendered)
+  await finishPrintFile(rendered, { density: options.density })
     .jpeg(PRINT_JPEG)
     .toFile(options.outPath);
 
@@ -139,6 +142,7 @@ export async function cropAll(job: PosterJob): Promise<RenderedAsset[]> {
           region: rect,
           source,
           target,
+          density: printDpi(sizeId),
         });
 
         assets.push({
@@ -165,6 +169,7 @@ export async function cropAll(job: PosterJob): Promise<RenderedAsset[]> {
         region,
         source,
         target,
+        density: printDpi(sizeId),
       });
 
       assets.push({

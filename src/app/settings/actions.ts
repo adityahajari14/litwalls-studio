@@ -30,9 +30,17 @@ export async function saveSettings(
     compareAt[sizeId] = String(formData.get(`compare.${sizeId}`) ?? "");
   }
 
+  // A range input posts tenths of a millimetre, so the slider can offer 0.1mm
+  // steps without dealing in fractional form values.
+  const rawMm = Number(formData.get("borderMm"));
+  const mockupBorder = {
+    enabled: formData.get("borderEnabled") === "on",
+    mm: Number.isFinite(rawMm) ? rawMm / 10 : 0.5,
+  };
+
   // writeSettings normalises and drops anything unparseable, so a blank field
   // clears that size's default rather than storing an empty string.
-  const saved = await writeSettings({ prices, compareAt });
+  const saved = await writeSettings({ prices, compareAt, mockupBorder });
 
   // A value the user typed that did NOT survive normalisation was garbage.
   // Silently dropping it would leave them believing a price was saved.

@@ -10,6 +10,7 @@ import {
   rectForSize,
   referenceSizeOf,
 } from "@/lib/templates/placement";
+import { printSize } from "@/lib/print/sizes";
 import type { MockupTemplate, Pt, SizeId } from "@/lib/print/types";
 
 /**
@@ -37,9 +38,20 @@ import type { MockupTemplate, Pt, SizeId } from "@/lib/print/types";
 export async function assemblePanels(
   panelPaths: string[],
   gapPercent: number,
+  border?: { mm: number; sizeId: SizeId },
 ): Promise<Buffer> {
+  // The border goes on EACH PANEL, not around the assembled strip. Three
+  // panels are three sheets of paper, and the printer borders every one of
+  // them — a single border around the outside would depict a product that
+  // does not exist.
+  const sources = border
+    ? await Promise.all(
+        panelPaths.map((path) => addWhiteBorder(path, border.mm, border.sizeId)),
+      )
+    : panelPaths;
+
   const metas = await Promise.all(
-    panelPaths.map((path) => sharp(path).metadata()),
+    sources.map((source) => sharp(source).metadata()),
   );
 
   const widths = metas.map((m) => m.width ?? 0);
@@ -53,12 +65,12 @@ export async function assemblePanels(
       : 0;
 
   const totalWidth =
-    widths.reduce((a, b) => a + b, 0) + gap * (panelPaths.length - 1);
+    widths.reduce((a, b) => a + b, 0) + gap * (sources.length - 1);
 
   let left = 0;
   const layers = [];
-  for (let i = 0; i < panelPaths.length; i++) {
-    layers.push({ input: panelPaths[i], left, top: 0 });
+  for (let i = 0; i < sources.length; i++) {
+    layers.push({ input: sources[i], left, top: 0 });
     left += widths[i] + gap;
   }
 
@@ -73,6 +85,49 @@ export async function assemblePanels(
     },
   })
     .composite(layers)
+    .png()
+    .toBuffer();
+}
+
+/**
+ * Add the white border the printer puts on every poster.
+ *
+ * Specified in MILLIMETRES and converted against the size's real physical
+ * dimensions, so 0.5mm means 0.5mm whether the sheet is an A5 or a 13x19. A
+ * percentage would silently mean a wider border on a larger print, which is
+ * not what the printer does.
+ *
+ * The border is added OUTSIDE the artwork, growing the sheet — that is the
+ * right way round, because the trimmed paper is the artwork plus its margin.
+ * The placement code then fits the whole sheet into the template's rect, so
+ * the paper fills the wall area exactly as it would in life.
+ */
+export async function addWhiteBorder(
+  source: string | Buffer,
+  mm: number,
+  sizeId: SizeId,
+): Promise<Buffer> {
+  if (mm <= 0) return sharp(source).toBuffer();
+
+  const metadata = await sharp(source).metadata();
+  if (!metadata.width) return sharp(source).toBuffer();
+
+  // At least 1px: below that the border rounds away and the setting appears
+  // to do nothing, which reads as a bug rather than as a subtle border.
+  const size = printSize(sizeId);
+  const border = Math.max(
+    1,
+    Math.round((mm / size.widthMm) * metadata.width),
+  );
+
+  return sharp(source)
+    .extend({
+      top: border,
+      bottom: border,
+      left: border,
+      right: border,
+      background: { r: 255, g: 255, b: 255, alpha: 1 },
+    })
     .png()
     .toBuffer();
 }
@@ -209,6 +264,10 @@ export type ComposeInput = {
   /** Which print size this mockup represents. Selects the placement area, so
    *  an A5 shows as a physically smaller poster on the same wall. */
   sizeId?: SizeId;
+  /** The white border the printer adds, in mm. Omit for none. */
+  borderMm?: number;
+  /** Set when the border was already applied per panel during assembly. */
+  preBordered?: boolean;
   template: MockupTemplate;
   /** The poster to place: a path, or a buffer for an assembled split set. */
   poster: string | Buffer;
@@ -218,7 +277,15 @@ export type ComposeInput = {
 export async function composeMockup(
   input: ComposeInput,
 ): Promise<{ width: number; height: number }> {
-  const { template, poster, outPath } = input;
+  const { template, outPath } = input;
+  const sizeId = input.sizeId ?? referenceSizeOf(template);
+
+  // A split set has already had the border applied per panel during assembly,
+  // so it must not be bordered again around the whole strip.
+  const poster =
+    input.borderMm && input.borderMm > 0 && !input.preBordered
+      ? await addWhiteBorder(input.poster, input.borderMm, sizeId)
+      : input.poster;
   const dir = join(TEMPLATES_DIR, template.id);
   const background = join(dir, template.background);
   const canvas = template.canvas;
@@ -233,7 +300,7 @@ export async function composeMockup(
     // inside the rect at its true aspect ratio, then centred.
     const rect = await fitRect(
       poster,
-      rectForSize(template, input.sizeId ?? referenceSizeOf(template)),
+      rectForSize(template, sizeId),
     );
 
     if (template.shadow && template.shadow > 0) {
@@ -292,7 +359,7 @@ export async function composeMockup(
       // set from being stretched to fill a portrait wall panel.
       corners: await fitQuad(
         poster,
-        quadForSize(template, input.sizeId ?? referenceSizeOf(template)),
+        quadForSize(template, sizeId),
       ),
       canvas,
     });

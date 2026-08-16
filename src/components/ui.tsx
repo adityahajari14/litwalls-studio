@@ -81,6 +81,36 @@ export function ButtonLink({
   );
 }
 
+/**
+ * A button-shaped plain anchor, for hrefs the router must not try to own.
+ *
+ * `next/link` fetches an RSC payload before navigating. Point it at a Route
+ * Handler that 302s to Google and that fetch fails, logging an error before
+ * falling back to a real navigation. It works, but noisily and a round trip
+ * late — so anything leaving the app entirely uses this instead.
+ */
+export function ButtonAnchor({
+  variant = "secondary",
+  size = "md",
+  className,
+  ...props
+}: ComponentProps<"a"> & {
+  variant?: keyof typeof BUTTON_VARIANTS;
+  size?: keyof typeof BUTTON_SIZES;
+}) {
+  return (
+    <a
+      className={cx(
+        BUTTON_BASE,
+        BUTTON_VARIANTS[variant],
+        BUTTON_SIZES[size],
+        className,
+      )}
+      {...props}
+    />
+  );
+}
+
 /* ── Surfaces ────────────────────────────────────────────────────────── */
 
 export function Card({ className, ...props }: ComponentProps<"div">) {
