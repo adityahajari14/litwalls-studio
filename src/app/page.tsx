@@ -13,10 +13,15 @@ import { listBatches, listJobs } from "@/lib/pipeline/store";
 import { readSettings } from "@/lib/pipeline/settings";
 import { hasReached, type PosterJob } from "@/lib/print/types";
 
-export default async function Home() {
-  const [batches, settings] = await Promise.all([
+export default async function Home({
+  searchParams,
+}: {
+  searchParams: Promise<{ driveError?: string; driveNotice?: string }>;
+}) {
+  const [batches, settings, params] = await Promise.all([
     listBatches(),
     readSettings(),
+    searchParams,
   ]);
 
   // Counts per batch, so the list answers "what still needs me?" at a glance
@@ -50,6 +55,17 @@ export default async function Home() {
             </Link>{" "}
             before publishing anything.
           </p>
+        </Card>
+      ) : null}
+
+      {params.driveError ? (
+        <Card className="mt-6 border-danger-500/30 bg-danger-50 p-4">
+          <p className="text-sm text-danger-700">{params.driveError}</p>
+        </Card>
+      ) : null}
+      {params.driveNotice ? (
+        <Card className="mt-6 border-ok-500/30 bg-ok-500/10 p-4">
+          <p className="text-sm text-ok-700">{params.driveNotice}</p>
         </Card>
       ) : null}
 

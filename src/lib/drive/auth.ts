@@ -71,10 +71,14 @@ export function authorizeUrl(state: string): string {
     // Without offline access Google returns no refresh token, and the
     // connection would silently expire an hour later.
     access_type: "offline",
-    // Forces the consent screen so a refresh token is issued even on a repeat
-    // authorisation — Google omits it otherwise, which looks like success but
-    // leaves nothing to persist.
-    prompt: "consent",
+    // "consent" forces the grant screen so a refresh token is issued even on
+    // a repeat authorisation — Google omits it otherwise, which looks like
+    // success but leaves nothing to persist. "select_account" forces the
+    // account chooser rather than silently reusing whichever Google session
+    // is already active in the browser, which is what makes "change account"
+    // on the dashboard actually offer a choice instead of reconnecting the
+    // same one.
+    prompt: "select_account consent",
     state,
   });
   return `${AUTH_URL}?${params}`;

@@ -1,4 +1,5 @@
 import { ButtonAnchor, Card } from "@/components/ui";
+import { DisconnectDriveButton } from "@/components/disconnect-drive-button";
 import { driveConfigured, driveConnected } from "@/lib/drive/auth";
 
 /**
@@ -43,15 +44,20 @@ export async function DriveStatus() {
   }
 
   return (
-    <p className="flex items-center gap-2 text-xs text-ink-400">
-      <span
-        aria-hidden
-        className="size-1.5 rounded-full bg-ok-500"
-      />
-      Drive connected — filing to{" "}
-      <code className="font-mono text-ink-500">
-        Litwalls Posters / &lt;Category&gt; / &lt;Product&gt;
-      </code>
-    </p>
+    <Card className="flex flex-wrap items-center justify-between gap-3 p-3">
+      <p className="flex items-center gap-2 text-xs text-ink-400">
+        <span aria-hidden className="size-1.5 rounded-full bg-ok-500" />
+        Drive connected — filing to{" "}
+        <code className="font-mono text-ink-500">
+          Litwalls Posters / &lt;Category&gt; / &lt;Product&gt;
+        </code>
+      </p>
+      <div className="flex items-center gap-1.5">
+        <ButtonAnchor href="/api/drive/connect" variant="ghost" size="sm">
+          Change account
+        </ButtonAnchor>
+        <DisconnectDriveButton />
+      </div>
+    </Card>
   );
 }
