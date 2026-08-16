@@ -375,6 +375,23 @@ export type SizePlacement<T> = {
   perSize?: boolean;
 };
 
+/**
+ * Placement for a split-3 poster's ASSEMBLED panel set — a different shape
+ * entirely from a single sheet, roughly twice as wide as it is tall rather
+ * than portrait. Authored against the same reference size as `sizing`/`rect`
+ * (there is no separate reference size to pick), so `base` is the placement
+ * at whichever size `sizing.referenceSize` names.
+ *
+ * Absent means a split poster falls back to the single-sheet `rect`/`sizing`,
+ * which is almost always too small: a triptych fitted into a box drawn for
+ * one portrait sheet is bound by height, leaving most of the box's width
+ * unused. A template meant to show split posters should set this.
+ */
+export type SplitPlacement<T> = {
+  base: T;
+  overrides?: Partial<Record<SizeId, T>>;
+};
+
 type TemplateBase = {
   id: string;
   name: string;
@@ -401,6 +418,7 @@ export type MockupTemplate =
       rect: PlacementRect;
       /** Per-size placement. Absent means every size uses `rect`. */
       sizing?: SizePlacement<PlacementRect>;
+      splitSizing?: SplitPlacement<PlacementRect>;
     })
   | (TemplateBase & {
       kind: "perspective";
@@ -412,6 +430,7 @@ export type MockupTemplate =
        */
       corners: [Pt, Pt, Pt, Pt];
       sizing?: SizePlacement<[Pt, Pt, Pt, Pt]>;
+      splitSizing?: SplitPlacement<[Pt, Pt, Pt, Pt]>;
     });
 
 /** An entry in the reusable product-image library (size guide, quality info…). */

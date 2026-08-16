@@ -18,9 +18,10 @@ import {
 import { SIZES } from "@/lib/print/sizes";
 import { DEFAULT_PANEL_GAP, MAX_PANEL_GAP } from "@/lib/templates/schema";
 import {
+  hasSplitPlacement,
   physicalScale,
-  scaleQuad,
-  scaleRect,
+  quadForSize,
+  rectForSize,
 } from "@/lib/templates/placement";
 import type {
   MockupTemplate,
@@ -54,20 +55,26 @@ export function TemplateEditor({
   const [sizeId, setSizeId] = useState<SizeId>(
     initial?.sizing?.referenceSize ?? "A3",
   );
+  /**
+   * Which poster format the placement box below is being edited for. A
+   * split-3 set is an assembled triptych — roughly twice as wide as it is
+   * tall — and needs its own box on the wall, not the single sheet's
+   * portrait one. There is no separate reference size for it: it is authored
+   * against the same reference size as the normal placement.
+   */
+  const [format, setFormat] = useState<"normal" | "split3">("normal");
   const [busy, setBusy] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
   const perSize = template.sizing?.perSize ?? false;
   const referenceSize = template.sizing?.referenceSize ?? "A3";
+  const isSplit = format === "split3";
   const backgroundUrl = `/api/templates/${templateId}/background?v=${busy ?? ""}`;
 
   /** The area currently being edited, derived if it has no override. */
   const currentRect = (): PlacementRect => {
     if (template.kind !== "flat") return { x: 0, y: 0, width: 1, height: 1 };
-    const override = template.sizing?.overrides?.[sizeId];
-    if (override) return override;
-    if (!template.sizing || sizeId === referenceSize) return template.rect;
-    return scaleRect(template.sizing.base, physicalScale(referenceSize, sizeId));
+    return rectForSize(template, sizeId, isSplit);
   };
 
   const currentQuad = (): [Pt, Pt, Pt, Pt] => {
@@ -79,10 +86,7 @@ export function TemplateEditor({
         { x: 0, y: 1 },
       ];
     }
-    const override = template.sizing?.overrides?.[sizeId];
-    if (override) return override;
-    if (!template.sizing || sizeId === referenceSize) return template.corners;
-    return scaleQuad(template.sizing.base, physicalScale(referenceSize, sizeId));
+    return quadForSize(template, sizeId, isSplit);
   };
 
   /**
@@ -94,6 +98,21 @@ export function TemplateEditor({
   function setRect(area: PlacementRect) {
     setTemplate((current) => {
       if (current.kind !== "flat") return current;
+
+      if (isSplit) {
+        const split = current.splitSizing ?? { base: area };
+        if (sizeId === referenceSize) {
+          return { ...current, splitSizing: { ...split, base: area } };
+        }
+        return {
+          ...current,
+          splitSizing: {
+            ...split,
+            overrides: { ...split.overrides, [sizeId]: area },
+          },
+        };
+      }
+
       const sizing = current.sizing ?? { referenceSize, base: current.rect };
 
       // Editing the reference moves the base, and every derived size follows.
@@ -120,6 +139,21 @@ export function TemplateEditor({
   function setQuad(area: [Pt, Pt, Pt, Pt]) {
     setTemplate((current) => {
       if (current.kind !== "perspective") return current;
+
+      if (isSplit) {
+        const split = current.splitSizing ?? { base: area };
+        if (sizeId === referenceSize) {
+          return { ...current, splitSizing: { ...split, base: area } };
+        }
+        return {
+          ...current,
+          splitSizing: {
+            ...split,
+            overrides: { ...split.overrides, [sizeId]: area },
+          },
+        };
+      }
+
       const sizing = current.sizing ?? { referenceSize, base: current.corners };
 
       if (sizeId === sizing.referenceSize) {
@@ -143,6 +177,21 @@ export function TemplateEditor({
 
   function resetOverride() {
     setTemplate((current) => {
+      if (isSplit) {
+        if (!current.splitSizing?.overrides) return current;
+        // Branched on `current.kind`, not merged, even though the two arms
+        // are identical: `splitSizing` is a different generic instantiation
+        // per kind, and TS can only tell which one `current` carries once
+        // `current.kind` has been checked in this exact scope.
+        if (current.kind === "flat") {
+          const overrides = { ...current.splitSizing.overrides };
+          delete overrides[sizeId];
+          return { ...current, splitSizing: { ...current.splitSizing, overrides } };
+        }
+        const overrides = { ...current.splitSizing.overrides };
+        delete overrides[sizeId];
+        return { ...current, splitSizing: { ...current.splitSizing, overrides } };
+      }
       if (!current.sizing?.overrides) return current;
       if (current.kind === "flat") {
         const overrides = { ...current.sizing.overrides };
@@ -176,8 +225,10 @@ export function TemplateEditor({
           kind: "perspective",
           corners,
           // Dropped: a rect override cannot be reinterpreted as a quad, and
-          // silently keeping stale shapes is worse than starting clean.
+          // silently keeping stale shapes is worse than starting clean. The
+          // same goes for the split-3 box.
           sizing: undefined,
+          splitSizing: undefined,
         } as MockupTemplate;
       }
 
@@ -198,6 +249,7 @@ export function TemplateEditor({
         kind: "flat",
         rect,
         sizing: undefined,
+        splitSizing: undefined,
       } as MockupTemplate;
     });
   }
@@ -271,26 +323,19 @@ export function TemplateEditor({
     router.push("/templates");
   }
 
-  const hasOverride = Boolean(template.sizing?.overrides?.[sizeId]);
+  const hasOverride = isSplit
+    ? Boolean(template.splitSizing?.overrides?.[sizeId])
+    : Boolean(template.sizing?.overrides?.[sizeId]);
 
-  // Every other size, drawn faintly, so the relative scale is visible.
+  // Every other size, drawn faintly, so the relative scale is visible. Reuses
+  // the same placement functions the server renders with, rather than
+  // re-deriving the fallback logic here — so a ghost never disagrees with
+  // what actually gets composited.
   const ghosts = SIZES.filter((s) => s.id !== sizeId).map((s) => {
     if (template.kind === "flat") {
-      const override = template.sizing?.overrides?.[s.id];
-      const rect =
-        override ??
-        (template.sizing && s.id !== referenceSize
-          ? scaleRect(template.sizing.base, physicalScale(referenceSize, s.id))
-          : template.rect);
-      return { label: s.label, rect };
+      return { label: s.label, rect: rectForSize(template, s.id, isSplit) };
     }
-    const override = template.sizing?.overrides?.[s.id];
-    const corners =
-      override ??
-      (template.sizing && s.id !== referenceSize
-        ? scaleQuad(template.sizing.base, physicalScale(referenceSize, s.id))
-        : template.corners);
-    return { label: s.label, corners };
+    return { label: s.label, corners: quadForSize(template, s.id, isSplit) };
   });
 
   return (
@@ -343,6 +388,23 @@ export function TemplateEditor({
             />
           }
         >
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <Segmented
+              size="sm"
+              value={format}
+              onChange={setFormat}
+              options={[
+                { value: "normal", label: "Single poster" },
+                { value: "split3", label: "Split-3 set" },
+              ]}
+            />
+            {isSplit && !hasSplitPlacement(template) ? (
+              <Badge tone="warn">
+                not set — falling back to the single-poster box
+              </Badge>
+            ) : null}
+          </div>
+
           <PlacementEditor
             backgroundUrl={backgroundUrl}
             canvas={template.canvas}

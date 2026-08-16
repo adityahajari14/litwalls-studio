@@ -127,6 +127,13 @@ export function PlacementEditor({
       className="relative mx-auto select-none overflow-hidden rounded-md border border-paper-300 bg-paper-100"
       style={{
         aspectRatio: `${canvas.width} / ${canvas.height}`,
+        width: "100%",
+        // `aspect-ratio` alone only fixes height from width — it does not
+        // stop the box growing to fill the column and then getting its
+        // height clipped by maxHeight, which distorts the ratio it was just
+        // told to keep. Capping width too, in proportion to maxHeight, is
+        // what actually letterboxes the box at the canvas's true shape.
+        maxWidth: `calc(min(62vh, 560px) * ${canvas.width} / ${canvas.height})`,
         maxHeight: "min(62vh, 560px)",
       }}
     >

@@ -142,3 +142,44 @@ test("a bigger reference size scales the other way", () => {
   const a3 = rectForSize(template, "A3");
   assert.ok(a3.width > FLAT.rect.width, "A3 should be larger than the A5 base");
 });
+
+test("without a split placement, a split poster falls back to the single-sheet rect", () => {
+  // This is the bug that motivated splitSizing: a triptych fitted into a box
+  // drawn for one portrait sheet renders tiny, and a template with no split
+  // box at all must still produce SOMETHING rather than throwing.
+  assert.deepEqual(rectForSize(FLAT, "A3", true), FLAT.rect);
+});
+
+test("a split placement is used only when isSplit is true", () => {
+  const wide = { x: 200, y: 400, width: 1600, height: 700 };
+  const template = { ...FLAT, splitSizing: { base: wide } };
+
+  assert.deepEqual(rectForSize(template, "A3", true), wide);
+  // The single-sheet rect is untouched by the split box existing.
+  assert.deepEqual(rectForSize(template, "A3", false), FLAT.rect);
+});
+
+test("split placement derives other sizes from the shared reference size", () => {
+  const wide = { x: 200, y: 400, width: 1600, height: 700 };
+  const template = {
+    ...FLAT,
+    sizing: { referenceSize: "A3" as const, base: FLAT.rect },
+    splitSizing: { base: wide },
+  };
+
+  const a5 = rectForSize(template, "A5", true);
+  assert.ok(Math.abs(a5.width - wide.width * 0.5) < 6);
+  assert.ok(a5.width < wide.width, "A5 split box must be smaller than the A3 base");
+});
+
+test("a split override wins over the derived split placement", () => {
+  const wide = { x: 200, y: 400, width: 1600, height: 700 };
+  const custom = { x: 10, y: 20, width: 30, height: 40 };
+  const template = {
+    ...FLAT,
+    splitSizing: { base: wide, overrides: { A5: custom } },
+  };
+
+  assert.deepEqual(rectForSize(template, "A5", true), custom);
+  assert.notDeepEqual(rectForSize(template, "A4", true), custom);
+});

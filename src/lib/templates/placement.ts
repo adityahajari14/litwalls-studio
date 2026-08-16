@@ -66,11 +66,29 @@ export function scaleQuad(
   })) as [Pt, Pt, Pt, Pt];
 }
 
-/** The rect a flat template uses for a given size. */
+/**
+ * The rect a flat template uses for a given size.
+ *
+ * `isSplit` selects `splitSizing` instead of `rect`/`sizing` — a split-3
+ * poster's assembled panel set is a different shape from a single sheet, and
+ * needs its own box on the wall. Falls back to the single-sheet placement
+ * when the template has not defined a split one, so existing templates keep
+ * working exactly as before this existed.
+ */
 export function rectForSize(
   template: Extract<MockupTemplate, { kind: "flat" }>,
   sizeId: SizeId,
+  isSplit = false,
 ): PlacementRect {
+  if (isSplit && template.splitSizing) {
+    const { base, overrides } = template.splitSizing;
+    const referenceSize = referenceSizeOf(template);
+    const override = overrides?.[sizeId];
+    if (override) return override;
+    if (sizeId === referenceSize) return base;
+    return scaleRect(base, physicalScale(referenceSize, sizeId));
+  }
+
   const sizing = template.sizing;
   if (!sizing) return template.rect;
 
@@ -81,11 +99,22 @@ export function rectForSize(
   return scaleRect(sizing.base, physicalScale(sizing.referenceSize, sizeId));
 }
 
-/** The corner quad a perspective template uses for a given size. */
+/** The corner quad a perspective template uses for a given size. See
+ *  `rectForSize` — same `isSplit` behaviour, just for the angled geometry. */
 export function quadForSize(
   template: Extract<MockupTemplate, { kind: "perspective" }>,
   sizeId: SizeId,
+  isSplit = false,
 ): [Pt, Pt, Pt, Pt] {
+  if (isSplit && template.splitSizing) {
+    const { base, overrides } = template.splitSizing;
+    const referenceSize = referenceSizeOf(template);
+    const override = overrides?.[sizeId];
+    if (override) return override;
+    if (sizeId === referenceSize) return base;
+    return scaleQuad(base, physicalScale(referenceSize, sizeId));
+  }
+
   const sizing = template.sizing;
   if (!sizing) return template.corners;
 
@@ -104,4 +133,11 @@ export function isPerSize(template: MockupTemplate): boolean {
 /** The size a single, non-per-size mockup is rendered at. */
 export function referenceSizeOf(template: MockupTemplate): SizeId {
   return template.sizing?.referenceSize ?? "A3";
+}
+
+/** Whether this template has a placement box of its own for a split-3
+ *  poster's assembled panel set, rather than falling back to the
+ *  single-sheet one. */
+export function hasSplitPlacement(template: MockupTemplate): boolean {
+  return Boolean(template.splitSizing);
 }

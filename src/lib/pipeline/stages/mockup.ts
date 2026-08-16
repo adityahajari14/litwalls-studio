@@ -87,6 +87,10 @@ export async function renderMockups(job: PosterJob): Promise<RenderedMockup[]> {
           // A split set was bordered per panel during assembly; bordering the
           // assembled strip again would draw an edge that does not exist.
           preBordered: job.kind === "split3",
+          // Selects the template's split-specific placement box, when it has
+          // one — the assembled triptych is a different shape from a single
+          // sheet and needs its own box on the wall, not the portrait one.
+          isSplit: job.kind === "split3",
           outPath: jobAsset(job.batchId, job.id, relPath),
         });
         rendered.push({

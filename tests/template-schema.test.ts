@@ -101,3 +101,30 @@ test("rejects non-objects without throwing", () => {
     assert.equal(validateTemplate(input).ok, false, String(input));
   }
 });
+
+test("accepts a split-3 placement box", () => {
+  const result = validateTemplate({
+    ...FLAT,
+    splitSizing: { base: { x: 100, y: 300, width: 1800, height: 800 } },
+  });
+  assert.equal(result.ok, true);
+});
+
+test("rejects a split placement with a malformed base area", () => {
+  const errors = errorsOf({
+    ...FLAT,
+    splitSizing: { base: { x: 100, y: 300, width: -5, height: 800 } },
+  });
+  assert.match(errors.join(" "), /splitSizing\.base/);
+});
+
+test("rejects a split override for an unknown size", () => {
+  const errors = errorsOf({
+    ...FLAT,
+    splitSizing: {
+      base: { x: 100, y: 300, width: 1800, height: 800 },
+      overrides: { A2: { x: 0, y: 0, width: 100, height: 100 } },
+    },
+  });
+  assert.match(errors.join(" "), /unknown size "A2"/);
+});

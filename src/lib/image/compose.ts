@@ -268,6 +268,11 @@ export type ComposeInput = {
   borderMm?: number;
   /** Set when the border was already applied per panel during assembly. */
   preBordered?: boolean;
+  /** Whether `poster` is an assembled split-3 panel set rather than one
+   *  sheet. Selects the template's split-specific placement box when it has
+   *  one — a triptych needs a wider box than a single sheet, and `fitRect`
+   *  cannot tell the difference on its own since it only sees pixels. */
+  isSplit?: boolean;
   template: MockupTemplate;
   /** The poster to place: a path, or a buffer for an assembled split set. */
   poster: string | Buffer;
@@ -300,7 +305,7 @@ export async function composeMockup(
     // inside the rect at its true aspect ratio, then centred.
     const rect = await fitRect(
       poster,
-      rectForSize(template, sizeId),
+      rectForSize(template, sizeId, input.isSplit ?? false),
     );
 
     if (template.shadow && template.shadow > 0) {
@@ -359,7 +364,7 @@ export async function composeMockup(
       // set from being stretched to fill a portrait wall panel.
       corners: await fitQuad(
         poster,
-        quadForSize(template, sizeId),
+        quadForSize(template, sizeId, input.isSplit ?? false),
       ),
       canvas,
     });
