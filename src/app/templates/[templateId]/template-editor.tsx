@@ -22,6 +22,7 @@ import {
   physicalScale,
   quadForSize,
   rectForSize,
+  trueAspectRatio,
 } from "@/lib/templates/placement";
 import type {
   MockupTemplate,
@@ -88,6 +89,43 @@ export function TemplateEditor({
     }
     return quadForSize(template, sizeId, isSplit);
   };
+
+  const panelGap = template.panelGap ?? DEFAULT_PANEL_GAP;
+
+  /**
+   * The ratio resize handles are locked to. Matches whichever orientation
+   * the box currently has — its natural shape, or that shape flipped —
+   * rather than always the natural one: a box already flipped to landscape
+   * must stay lockable in landscape, or the next drag would silently snap it
+   * back to portrait.
+   */
+  const lockRatio =
+    template.kind === "flat"
+      ? (() => {
+          const natural = trueAspectRatio(sizeId, isSplit, panelGap);
+          const rect = currentRect();
+          const boxIsWide = rect.width >= rect.height;
+          return boxIsWide === (natural >= 1) ? natural : 1 / natural;
+        })()
+      : undefined;
+
+  /** Swap width and height, keeping the box centred — the only reshaping a
+   *  locked box allows, since its ratio is otherwise fixed to the real
+   *  object's physical proportions. */
+  function flipOrientation() {
+    const rect = currentRect();
+    const cx = rect.x + rect.width / 2;
+    const cy = rect.y + rect.height / 2;
+    const width = rect.height;
+    const height = rect.width;
+    const canvas = template.canvas;
+    setRect({
+      x: Math.round(Math.min(Math.max(cx - width / 2, 0), canvas.width - width)),
+      y: Math.round(Math.min(Math.max(cy - height / 2, 0), canvas.height - height)),
+      width: Math.round(width),
+      height: Math.round(height),
+    });
+  }
 
   /**
    * Writing an area updates the BASE when editing the reference size, and an
@@ -403,6 +441,22 @@ export function TemplateEditor({
                 not set — falling back to the single-poster box
               </Badge>
             ) : null}
+            {template.kind === "flat" ? (
+              <Segmented
+                size="sm"
+                value={currentRect().width >= currentRect().height ? "landscape" : "portrait"}
+                onChange={(value) => {
+                  const rect = currentRect();
+                  const isLandscape = rect.width >= rect.height;
+                  const wantsLandscape = value === "landscape";
+                  if (isLandscape !== wantsLandscape) flipOrientation();
+                }}
+                options={[
+                  { value: "portrait", label: "Vertical" },
+                  { value: "landscape", label: "Horizontal" },
+                ]}
+              />
+            ) : null}
           </div>
 
           <PlacementEditor
@@ -411,7 +465,7 @@ export function TemplateEditor({
             ghosts={ghosts}
             mode={
               template.kind === "flat"
-                ? { kind: "flat", rect: currentRect(), onChange: setRect }
+                ? { kind: "flat", rect: currentRect(), onChange: setRect, lockRatio }
                 : {
                     kind: "perspective",
                     corners: currentQuad(),
@@ -423,7 +477,7 @@ export function TemplateEditor({
           <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-ink-500">
             <span>
               {template.kind === "flat"
-                ? "Drag the box to move it; drag a corner to resize."
+                ? "Drag the box to move it; drag a corner to resize — locked to the real shape of what's selected."
                 : "Drag each numbered corner onto the wall, in order: top-left, top-right, bottom-right, bottom-left."}
             </span>
             {sizeId === referenceSize ? (

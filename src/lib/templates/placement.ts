@@ -30,6 +30,29 @@ export function physicalScale(from: SizeId, to: SizeId): number {
 }
 
 /**
+ * The TRUE width:height ratio of what actually gets placed on the wall — a
+ * single print sheet, or an assembled split-3 panel set. Not a shape a
+ * template author gets to invent: it is the real physical proportions of the
+ * object being shown, derived from the same millimetre dimensions the print
+ * sizes are defined by.
+ *
+ * A single sheet is always portrait (every print size is width < height). A
+ * split-3 set is the opposite: three sheets side by side, each contributing
+ * its own width, plus the two gaps between them — inherently landscape.
+ */
+export function trueAspectRatio(
+  sizeId: SizeId,
+  isSplit: boolean,
+  panelGapPercent: number,
+): number {
+  const size = printSize(sizeId);
+  if (!isSplit) return size.widthMm / size.heightMm;
+
+  const gapMm = size.widthMm * (panelGapPercent / 100);
+  return (size.widthMm * 3 + gapMm * 2) / size.heightMm;
+}
+
+/**
  * Scale a rect about its own centre.
  *
  * Centre rather than a corner because a poster hanging on a wall stays where

@@ -14,12 +14,29 @@ import type { PlacementRect, Pt } from "@/lib/print/types";
  */
 
 type Mode =
-  | { kind: "flat"; rect: PlacementRect; onChange: (rect: PlacementRect) => void }
+  | {
+      kind: "flat";
+      rect: PlacementRect;
+      onChange: (rect: PlacementRect) => void;
+      /**
+       * Width:height ratio the resize handles are locked to — the real
+       * physical shape of whatever is being placed (a sheet, or an assembled
+       * split-3 set), not a shape a template author gets to invent. Omitting
+       * it falls back to free resize, kept only so a caller that has not
+       * computed a ratio yet does not crash.
+       */
+      lockRatio?: number;
+    }
   | {
       kind: "perspective";
       corners: [Pt, Pt, Pt, Pt];
       onChange: (corners: [Pt, Pt, Pt, Pt]) => void;
     };
+
+/** Shortest edge a locked resize will allow, in canvas pixels. Small enough
+ *  to never bind in practice, just enough to stop a drag collapsing the box
+ *  to nothing. */
+const MIN_LOCKED_EDGE = 30;
 
 const HANDLES = ["nw", "ne", "se", "sw"] as const;
 type Handle = (typeof HANDLES)[number];
@@ -92,6 +109,24 @@ export function PlacementEditor({
     const o = drag.origin;
     const right = o.x + o.width;
     const bottom = o.y + o.height;
+
+    if (mode.lockRatio) {
+      const { x, y, width, height } = resizeLocked(
+        drag.handle,
+        o,
+        point,
+        mode.lockRatio,
+        canvas,
+      );
+      mode.onChange({
+        x: Math.round(x),
+        y: Math.round(y),
+        width: Math.round(width),
+        height: Math.round(height),
+      });
+      return;
+    }
+
     let x = o.x;
     let y = o.y;
     let width = o.width;
@@ -259,4 +294,65 @@ export function PlacementEditor({
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
+}
+
+/**
+ * Resize a rect from one corner, opposite corner pinned, constrained to
+ * `ratio` (width:height) the whole time — the box can grow or shrink, but
+ * never distort into a shape the real object being placed does not have.
+ *
+ * The pointer only tells us "how far", not "along which axis" — dragging a
+ * corner diagonally moves both. Two candidate widths are derived, one from
+ * how far the pointer moved horizontally and one (via the ratio) from how
+ * far it moved vertically, and whichever is bigger wins, so the box keeps up
+ * with whichever direction is being dragged harder rather than always
+ * tracking just one axis.
+ *
+ * The canvas bound is computed as a width CEILING up front, from the anchor
+ * corner's fixed position, rather than clamping the resulting box afterward
+ * — clamping x/y post hoc can only move the DRAGGED corner back in, which
+ * near an edge would silently drag the ANCHOR corner along with it and break
+ * the "opposite corner stays put" contract the handles promise.
+ */
+function resizeLocked(
+  handle: Handle,
+  origin: PlacementRect,
+  point: Pt,
+  ratio: number,
+  canvas: { width: number; height: number },
+): PlacementRect {
+  const right = origin.x + origin.width;
+  const bottom = origin.y + origin.height;
+
+  // The corner that stays put while the dragged one moves.
+  const anchor: Pt =
+    handle === "nw"
+      ? { x: right, y: bottom }
+      : handle === "ne"
+        ? { x: origin.x, y: bottom }
+        : handle === "se"
+          ? { x: origin.x, y: origin.y }
+          : { x: right, y: origin.y };
+
+  const maxWidth = handle === "nw" || handle === "sw" ? right : canvas.width - origin.x;
+  const maxHeight = handle === "nw" || handle === "ne" ? bottom : canvas.height - origin.y;
+  // A ratio-locked box is bound by whichever axis runs out of canvas room
+  // first, expressed as a single width ceiling since height follows from it.
+  const ceiling = Math.max(0, Math.min(maxWidth, maxHeight * ratio));
+
+  const rawWidth = clamp(Math.abs(point.x - anchor.x), 0, ceiling);
+  const rawHeight = clamp(Math.abs(point.y - anchor.y), 0, ceiling / ratio);
+
+  const fromWidth = rawWidth;
+  const fromHeight = rawHeight * ratio;
+  let width = fromWidth >= fromHeight ? fromWidth : fromHeight;
+
+  const minWidth = Math.min(ratio >= 1 ? MIN_LOCKED_EDGE * ratio : MIN_LOCKED_EDGE, ceiling);
+  width = clamp(width, minWidth, ceiling);
+  const height = width / ratio;
+
+  const x = handle === "nw" || handle === "sw" ? right - width : origin.x;
+  const y = handle === "nw" || handle === "ne" ? bottom - height : origin.y;
+
+  return { x, y, width, height };
 }

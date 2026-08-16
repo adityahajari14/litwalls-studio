@@ -7,6 +7,7 @@ import {
   rectForSize,
   scaleQuad,
   scaleRect,
+  trueAspectRatio,
 } from "../src/lib/templates/placement.ts";
 import type { MockupTemplate } from "../src/lib/print/types.ts";
 
@@ -170,6 +171,26 @@ test("split placement derives other sizes from the shared reference size", () =>
   const a5 = rectForSize(template, "A5", true);
   assert.ok(Math.abs(a5.width - wide.width * 0.5) < 6);
   assert.ok(a5.width < wide.width, "A5 split box must be smaller than the A3 base");
+});
+
+test("a single sheet's true ratio is always portrait", () => {
+  for (const sizeId of ["A5", "A4", "A3", "13x19"] as const) {
+    const ratio = trueAspectRatio(sizeId, false, 1.2);
+    assert.ok(ratio < 1, `${sizeId} should be portrait, got ratio ${ratio}`);
+  }
+});
+
+test("a split-3 set's true ratio is always landscape, roughly 3 panels wide", () => {
+  const ratio = trueAspectRatio("A3", true, 1.2);
+  assert.ok(ratio > 1, "a triptych should be wider than it is tall");
+  // Three panels at ~0.707 each, plus a couple of small gaps.
+  assert.ok(ratio > 2 && ratio < 2.3, `expected roughly 2.1, got ${ratio}`);
+});
+
+test("a bigger panel gap widens the split ratio", () => {
+  const noGap = trueAspectRatio("A3", true, 0);
+  const withGap = trueAspectRatio("A3", true, 5);
+  assert.ok(withGap > noGap, "more gap between panels means a wider set");
 });
 
 test("a split override wins over the derived split placement", () => {
