@@ -174,6 +174,16 @@ export type AiMetadata = {
   tags: string[];
   altText: string;
   /**
+   * The collection the model thinks this belongs in, by handle.
+   *
+   * A batch picks one collection, but batches are often mixed — a Marvel drop
+   * containing a Star Wars poster. When this disagrees with the batch, the
+   * review screen says so. It is a suggestion, never applied automatically:
+   * moving a product between collections changes its title suffix, and doing
+   * that silently would be worse than the occasional misfile.
+   */
+  suggestedCategoryId?: string | null;
+  /**
    * Distinguishes a human's words from a model's guess, so the review UI can
    * highlight what still needs a look.
    */
@@ -268,6 +278,15 @@ export type PosterJob = {
   focal: FocalPoint | null;
   /** A size present here wins over the focal-derived crop, permanently. */
   cropOverrides: Partial<Record<SizeId, NormRect>>;
+  /**
+   * Model-chosen crops for sizes whose shape differs sharply from the source.
+   *
+   * Distinct from `cropOverrides`, which is a human's decision: these are
+   * suggestions the renderer uses when nothing better exists, and a human edit
+   * still wins. Kept separate so "reset to auto" returns to the AI crop rather
+   * than to a centred one.
+   */
+  aiCrops?: Partial<Record<SizeId, { rect: NormRect; reason: string }>>;
   /**
    * Top of the price override chain: job → batch → settings → fallback.
    * Only the sizes actually changed appear here; the rest fall through.

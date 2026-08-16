@@ -5,6 +5,7 @@ import { readFile, stat } from "node:fs/promises";
 import sharp from "sharp";
 
 import { cropRectFor, toPixelRect } from "@/lib/image/crop-rect";
+import { finishPrintFile, PRINT_JPEG } from "@/lib/image/print-output";
 import { ensureDir, jobAsset, jobDir } from "@/lib/pipeline/paths";
 import { MASTER_FILE } from "@/lib/pipeline/stages/upscale";
 import {
@@ -38,8 +39,15 @@ export function cropForSize(
   sizeId: SizeId,
   source: { width: number; height: number },
 ): NormRect {
+  // A human's edit always wins.
   const override = job.cropOverrides[sizeId];
   if (override) return override;
+
+  // Then a crop the model chose specifically for this shape. Only present for
+  // sizes whose aspect differs sharply from the source, where sliding a window
+  // over the subject box produces an arbitrary slice rather than a picture.
+  const ai = job.aiCrops?.[sizeId];
+  if (ai) return ai.rect;
 
   return cropRectFor({
     source,
@@ -69,7 +77,7 @@ async function renderOne(options: {
 }): Promise<{ width: number; height: number; bytes: number }> {
   const px = toPixelRect(options.region, options.source);
 
-  await sharp(options.masterPath)
+  const rendered = sharp(options.masterPath)
     .extract({
       left: px.left,
       top: px.top,
@@ -79,10 +87,12 @@ async function renderOne(options: {
     .resize(options.target.width, options.target.height, {
       kernel: "lanczos3",
       fit: "fill",
-    })
-    // 92 is high enough that print output shows no visible artifacts, while
-    // keeping a 13x19 well under the size where Drive uploads get tedious.
-    .jpeg({ quality: 92, chromaSubsampling: "4:4:4" })
+    });
+
+  // Sharpen, tag the real print density and keep the colour profile. Without
+  // this the file left here claiming 72dpi with its ICC profile discarded.
+  await finishPrintFile(rendered)
+    .jpeg(PRINT_JPEG)
     .toFile(options.outPath);
 
   const [meta, stats] = await Promise.all([

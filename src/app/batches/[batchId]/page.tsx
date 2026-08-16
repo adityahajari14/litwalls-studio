@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 
 import { DropZone } from "@/app/batches/[batchId]/drop-zone";
+import { DeleteBatch } from "@/components/delete-batch";
 import { JobGrid } from "@/components/job-grid";
 import { PublishButton } from "@/components/publish-button";
 import { RunButton } from "@/components/run-button";
@@ -81,6 +82,17 @@ export default async function BatchPage(
 
       <Section title="Posters" className="mt-8">
         <JobGrid batchId={batch.id} initialJobs={jobs} />
+      </Section>
+
+      <Section title="Danger zone" className="mt-12">
+        <DeleteBatch
+          batchId={batch.id}
+          name={batch.name}
+          posterCount={jobs.length}
+          publishedCount={
+            jobs.filter((job) => job.shopify?.productId).length
+          }
+        />
       </Section>
     </main>
   );

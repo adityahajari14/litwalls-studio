@@ -249,6 +249,7 @@ export function ReviewScreen({
     : "—";
 
   const lowRes = job.assets.some((a) => a.sizeId === sizeId && a.lowRes);
+  const aiCrop = job.aiCrops?.[sizeId];
   const published = Boolean(job.shopify?.productId);
 
   return (
@@ -266,6 +267,19 @@ export function ReviewScreen({
             {job.probe && job.probe.coverage < 0.5 ? (
               <Badge tone="warn">
                 {Math.round(job.probe.coverage * 100)}% of artwork used
+              </Badge>
+            ) : null}
+            {/* The batch picks one collection, but batches are often mixed.
+                A suggestion is never applied automatically — moving a product
+                changes its title suffix, and doing that silently would be
+                worse than the occasional misfile. */}
+            {job.metadata?.suggestedCategoryId &&
+            job.metadata.suggestedCategoryId !== batch.category.id ? (
+              <Badge
+                tone="warn"
+                title={`The model thinks this belongs in "${job.metadata.suggestedCategoryId}" rather than ${batch.category.label}.`}
+              >
+                maybe {job.metadata.suggestedCategoryId}?
               </Badge>
             ) : null}
             {published ? <Badge tone="ok">published</Badge> : null}
@@ -312,6 +326,11 @@ export function ReviewScreen({
             action={
               <span className="flex items-center gap-2">
                 {lowRes ? <Badge tone="danger">below 250dpi</Badge> : null}
+                {aiCrop && !crops[sizeId] ? (
+                  <Badge tone="accent" title={aiCrop.reason}>
+                    AI reframed
+                  </Badge>
+                ) : null}
                 {crops[sizeId] ? (
                   <Button
                     size="sm"

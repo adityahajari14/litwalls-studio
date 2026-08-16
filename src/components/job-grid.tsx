@@ -68,6 +68,29 @@ export function JobGrid({
     }
   }
 
+  async function removeJob(job: PosterJob) {
+    const published = Boolean(job.shopify?.productId);
+    if (
+      !confirm(
+        `Remove "${job.metadata?.subject || job.sourceName}" from this batch?\n\n` +
+          "Deletes the local artwork and rendered files." +
+          (published
+            ? "\n\nIt is already published — the Shopify product stays live."
+            : ""),
+      )
+    ) {
+      return;
+    }
+
+    await fetch(`/api/batches/${batchId}/jobs/${job.id}`, { method: "DELETE" });
+    setSelected((current) => {
+      const next = new Set(current);
+      next.delete(job.id);
+      return next;
+    });
+    router.refresh();
+  }
+
   if (jobs.length === 0) {
     return (
       <Empty title="No posters yet">
@@ -139,6 +162,7 @@ export function JobGrid({
             job={job}
             selected={selected.has(job.id)}
             onToggle={() => toggle(job.id)}
+            onDelete={() => removeJob(job)}
           />
         ))}
       </ul>
@@ -150,10 +174,12 @@ function JobCard({
   job,
   selected,
   onToggle,
+  onDelete,
 }: {
   job: PosterJob;
   selected: boolean;
   onToggle: () => void;
+  onDelete: () => void;
 }) {
   // Prefer a mockup: it is what the product will actually look like. Fall
   // back to the A3 render, then to nothing while the job is still processing.
@@ -216,11 +242,22 @@ function JobCard({
                 type="checkbox"
                 checked={selected}
                 onChange={onToggle}
-                className="size-3.5 accent-[var(--color-accent-600)]"
+                className="size-3.5 accent-[var(--color-accent-500)]"
                 aria-label={`Select ${job.sourceName}`}
               />
             </label>
           ) : null}
+
+          {/* Shown on hover only: a delete button always visible on every card
+              in a grid of thirty is an accident waiting to happen. */}
+          <button
+            onClick={onDelete}
+            aria-label={`Remove ${job.sourceName}`}
+            title="Remove from batch"
+            className="absolute right-2 top-2 grid size-6 place-items-center rounded border border-paper-400/70 bg-paper-100/90 text-ink-500 opacity-0 transition-opacity hover:border-danger-500/60 hover:text-danger-700 focus-visible:opacity-100 group-hover:opacity-100"
+          >
+            ×
+          </button>
         </div>
 
         <div className="p-2.5">

@@ -1,13 +1,25 @@
 import "server-only";
 
 import { findFocalPoint } from "@/lib/gemini/focal";
+import {
+  conformToAspect,
+  needsReframe,
+  reframeForAspect,
+} from "@/lib/gemini/reframe";
 import { describePoster } from "@/lib/gemini/metadata";
 import { jobAsset } from "@/lib/pipeline/paths";
 import { MASTER_FILE } from "@/lib/pipeline/stages/upscale";
 import { readBatch } from "@/lib/pipeline/store";
 import { fetchCatalogue } from "@/lib/shopify/numbering";
+import { fetchCategories } from "@/lib/shopify/collections";
 import { parseTitle } from "@/lib/print/title";
-import type { AiMetadata, FocalPoint, PosterJob } from "@/lib/print/types";
+import { cropAspectFor, SIZES } from "@/lib/print/sizes";
+import type {
+  AiMetadata,
+  FocalPoint,
+  NormRect,
+  PosterJob,
+} from "@/lib/print/types";
 
 /**
  * Ask Gemini what this poster is, and where its subject sits.
@@ -64,7 +76,8 @@ export async function analyze(job: PosterJob): Promise<Partial<PosterJob>> {
   // key is present, without needing the job deleted and re-uploaded.
   const needsMetadata = !job.metadata || job.metadata.source === "fallback";
   const needsFocal = !job.focal || job.focal.source === "fallback";
-  if (!needsMetadata && !needsFocal) return {};
+  const needsCrops = job.aiCrops === undefined;
+  if (!needsMetadata && !needsFocal && !needsCrops) return {};
 
   const image = jobAsset(job.batchId, job.id, MASTER_FILE);
   const vocabulary = needsMetadata
@@ -81,6 +94,7 @@ export async function analyze(job: PosterJob): Promise<Partial<PosterJob>> {
           category: batch.category,
           knownSubjects: vocabulary.subjects,
           knownTags: vocabulary.tags,
+          collections: await categoryOptions(),
         })
       : Promise.resolve(job.metadata!),
     needsFocal
@@ -88,5 +102,74 @@ export async function analyze(job: PosterJob): Promise<Partial<PosterJob>> {
       : Promise.resolve(job.focal!),
   ]);
 
-  return { metadata, focal };
+  const aiCrops = needsCrops ? await reframeSizes(job) : job.aiCrops;
+
+  return { metadata, focal, aiCrops };
+}
+
+/**
+ * Ask for a purpose-chosen crop at each size whose shape differs sharply from
+ * the source.
+ *
+ * Sizes that share an aspect ratio share one answer — A5, A4 and A3 are all
+ * 1:√2, so asking three times would be three identical questions and three
+ * charges. Sequential rather than parallel because the batch runner already
+ * runs two jobs at once, and a burst of concurrent calls is the quickest way
+ * to meet a rate limit.
+ */
+async function reframeSizes(
+  job: PosterJob,
+): Promise<PosterJob["aiCrops"]> {
+  if (!job.probe) return {};
+
+  const image = jobAsset(job.batchId, job.id, MASTER_FILE);
+  const source = { width: job.probe.width, height: job.probe.height };
+  const sourceAspect = source.width / source.height;
+
+  const out: NonNullable<PosterJob["aiCrops"]> = {};
+  const byAspect = new Map<string, { rect: NormRect; reason: string }>();
+
+  for (const size of SIZES) {
+    const targetAspect = cropAspectFor(size.id, job.kind);
+    if (!needsReframe(sourceAspect, targetAspect)) continue;
+
+    const key = targetAspect.toFixed(3);
+    let answer = byAspect.get(key);
+
+    if (!answer) {
+      const result = await reframeForAspect({
+        image,
+        sourceName: job.sourceName,
+        targetAspect,
+        label: size.label,
+      });
+      if (!result) continue;
+      // The model's box is approximately the right shape; the renderer needs
+      // it exact or the output is letterboxed.
+      answer = {
+        rect: conformToAspect(result.rect, targetAspect, source),
+        reason: result.reason,
+      };
+      byAspect.set(key, answer);
+    }
+
+    out[size.id] = answer;
+  }
+
+  return out;
+}
+
+/**
+ * The collections available to suggest from.
+ *
+ * Best-effort: an unreachable Shopify costs a suggestion, not the batch, so a
+ * failure here returns an empty list and the prompt simply omits the question.
+ */
+async function categoryOptions(): Promise<{ id: string; label: string }[]> {
+  try {
+    const categories = await fetchCategories();
+    return categories.map((c) => ({ id: c.id, label: c.label }));
+  } catch {
+    return [];
+  }
 }

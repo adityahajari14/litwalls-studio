@@ -21,6 +21,7 @@ const SCHEMA = {
     subtitle: { type: ["string", "null"] },
     tags: { type: "array", items: { type: "string" } },
     altText: { type: "string" },
+    collection: { type: ["string", "null"] },
   },
   required: ["subject", "tags", "altText"],
 } as const;
@@ -30,12 +31,15 @@ type RawMetadata = {
   subtitle: string | null;
   tags: string[];
   altText: string;
+  /** Suggested collection handle. Null when the model is unsure. */
+  collection: string | null;
 };
 
 function buildPrompt(options: {
   category: Pick<Category, "label">;
   knownSubjects: string[];
   knownTags: string[];
+  collections: { id: string; label: string }[];
 }): string {
   const { category, knownSubjects, knownTags } = options;
 
@@ -56,6 +60,20 @@ function buildPrompt(options: {
     '- "tags": 3 to 6 tags in Title Case.',
     '- "altText": one plain descriptive sentence, at most 125 characters.',
     "",
+    // The batch picks a collection, but a batch is often mixed — a Marvel drop
+    // that contains a Star Wars poster. Asking per poster catches the one that
+    // was filed in the wrong place, which is otherwise only noticed when it
+    // fails to appear in the collection a customer is browsing.
+    options.collections.length > 0
+      ? [
+          '- "collection": which of these the poster belongs in, by handle.',
+          "  Reply with null if it does not clearly fit any of them:",
+          options.collections
+            .map((c) => `    ${c.id} — ${c.label}`)
+            .join("\n"),
+          "",
+        ].join("\n")
+      : "",
     // Reusing the exact existing spelling is what stops "Spider Man" becoming
     // "Spiderman" on poster 155 and starting a second numbering sequence.
     knownSubjects.length > 0
@@ -99,6 +117,10 @@ function parse(value: unknown): RawMetadata | null {
         : null,
     tags: tags.map((t) => t.trim()).slice(0, 8),
     altText: typeof raw.altText === "string" ? raw.altText.trim().slice(0, 125) : "",
+    collection:
+      typeof raw.collection === "string" && raw.collection.trim()
+        ? raw.collection.trim()
+        : null,
   };
 }
 
@@ -126,13 +148,14 @@ export async function describePoster(options: {
   category: Pick<Category, "label">;
   knownSubjects: string[];
   knownTags: string[];
+  collections?: { id: string; label: string }[];
 }): Promise<AiMetadata> {
   if (!geminiConfigured()) return fallbackMetadata(options.sourceName);
 
   try {
     const image = await prepareImage(options.image);
     const result = await askGemini<RawMetadata>({
-      prompt: buildPrompt(options),
+      prompt: buildPrompt({ ...options, collections: options.collections ?? [] }),
       image,
       schema: SCHEMA as unknown as Record<string, unknown>,
       parse,
@@ -149,6 +172,7 @@ export async function describePoster(options: {
       sequence: null, // assigned at publish time, from the live catalogue
       tags: result.value.tags,
       altText: result.value.altText,
+      suggestedCategoryId: result.value.collection,
       source: "gemini",
     };
   } catch (cause) {

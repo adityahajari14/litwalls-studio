@@ -82,7 +82,13 @@ export async function upscale(job: PosterJob): Promise<ProbeResult> {
     });
   }
 
-  await pipeline.png({ compressionLevel: 6 }).toFile(master);
+  // withMetadata carries the source's ICC profile into the master. Without it
+  // the profile is discarded HERE, and every crop cut from this file is
+  // already colour-managed as plain sRGB no matter what the crop stage does.
+  await pipeline
+    .withMetadata()
+    .png({ compressionLevel: 6 })
+    .toFile(master);
 
   const metadata = await sharp(master).metadata();
   const size = {
