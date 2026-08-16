@@ -117,11 +117,17 @@ export function DropZone({
         />
 
         {progress ? (
-          <div className="text-sm">
+          <div className="animate-fade-rise text-sm">
             <p className="font-medium">
               Uploading {progress.index} of {progress.total}
             </p>
             <p className="mt-1 truncate text-ink-500">{progress.name}</p>
+            <div className="mx-auto mt-3 h-1 w-48 overflow-hidden rounded-full bg-paper-300">
+              <div
+                className="h-full rounded-full bg-accent-500 transition-[width] duration-300 ease-out"
+                style={{ width: `${(progress.index / progress.total) * 100}%` }}
+              />
+            </div>
           </div>
         ) : (
           <div className="text-sm">
@@ -135,14 +141,14 @@ export function DropZone({
       </div>
 
       {added > 0 && !progress ? (
-        <p className="mt-3 text-sm text-ok-700">
+        <p className="animate-fade-rise mt-3 text-sm text-ok-700">
           Added {added} poster{added === 1 ? "" : "s"}
           {initialCount > 0 ? ` — ${initialCount + added} in this batch` : ""}.
         </p>
       ) : null}
 
       {problems.length > 0 ? (
-        <ul className="mt-3 space-y-1 text-sm text-warn-700">
+        <ul className="animate-fade-rise mt-3 space-y-1 text-sm text-warn-700">
           {problems.map((problem) => (
             <li key={problem}>{problem}</li>
           ))}

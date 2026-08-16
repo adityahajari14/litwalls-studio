@@ -91,7 +91,7 @@ export function Search() {
       />
 
       {open && query.trim().length >= 2 ? (
-        <div className="absolute right-0 top-10 z-40 max-h-[60vh] w-80 overflow-auto rounded-xl border border-paper-300 bg-paper-100 p-1.5 shadow-[--shadow-pop]">
+        <div className="animate-pop-in absolute right-0 top-10 z-40 max-h-[60vh] w-80 origin-top-right overflow-auto rounded-xl border border-paper-300 bg-paper-100 p-1.5 shadow-[--shadow-pop]">
           {!hasResults ? (
             <p className="px-2.5 py-3 text-sm text-ink-400">No matches.</p>
           ) : null}

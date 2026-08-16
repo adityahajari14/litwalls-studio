@@ -87,8 +87,12 @@ export default async function Home({
           </Empty>
         ) : (
           <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {withCounts.map(({ batch, jobs }) => (
-              <li key={batch.id}>
+            {withCounts.map(({ batch, jobs }, index) => (
+              <li
+                key={batch.id}
+                className="animate-fade-rise"
+                style={{ animationDelay: `${Math.min(index, 12) * 25}ms` }}
+              >
                 <Link href={`/batches/${batch.id}`} className="block">
                   <Card className="h-full p-4 transition-all duration-200 hover:border-paper-400">
                     <div className="flex items-start justify-between gap-2">

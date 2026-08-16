@@ -61,7 +61,14 @@ export function PublishButton({ batchId }: { batchId: string }) {
     <div>
       <div className="flex flex-wrap items-center gap-2.5">
         <Button variant="primary" onClick={publish} disabled={pending}>
-          {pending ? "Publishing…" : "Publish to Shopify"}
+          {pending ? (
+            <>
+              <span aria-hidden className="breathe size-1.5 rounded-full bg-white" />
+              Publishing…
+            </>
+          ) : (
+            "Publish to Shopify"
+          )}
         </Button>
 
         <label className="flex cursor-pointer items-center gap-1.5 text-xs text-ink-500">
@@ -74,11 +81,13 @@ export function PublishButton({ batchId }: { batchId: string }) {
           Go live (ACTIVE) instead of draft
         </label>
 
-        {result ? <span className="text-xs text-ink-600">{result}</span> : null}
+        {result ? (
+          <span className="animate-fade-rise text-xs text-ink-600">{result}</span>
+        ) : null}
       </div>
 
       {live ? (
-        <p className="mt-2 text-xs text-warn-700">
+        <p className="animate-fade-rise mt-2 text-xs text-warn-700">
           Live products appear on the storefront immediately. Worth publishing
           one as a draft first and checking it in Shopify before doing a whole
           batch.
@@ -86,7 +95,7 @@ export function PublishButton({ batchId }: { batchId: string }) {
       ) : null}
 
       {errors.length > 0 ? (
-        <ul className="mt-2 space-y-0.5 text-xs text-danger-700">
+        <ul className="animate-fade-rise mt-2 space-y-0.5 text-xs text-danger-700">
           {errors.map((error) => (
             <li key={error}>{error}</li>
           ))}

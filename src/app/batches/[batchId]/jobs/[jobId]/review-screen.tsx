@@ -532,7 +532,12 @@ export function ReviewScreen({
           </Button>
 
           {message ? (
-            <span className="w-full text-xs text-ink-500 sm:w-auto">{message}</span>
+            <span
+              key={message}
+              className="animate-fade-rise w-full text-xs text-ink-500 sm:w-auto"
+            >
+              {message}
+            </span>
           ) : (
             <span className="hidden text-[11px] text-ink-400 sm:inline">
               J / K to move · A to approve · S to save

@@ -131,8 +131,11 @@ export function SettingsForm({
 
         {state ? (
           <span
+            key={state.message}
             className={
-              state.ok ? "text-sm text-ok-700" : "text-sm text-warn-700"
+              state.ok
+                ? "animate-fade-rise text-sm text-ok-700"
+                : "animate-fade-rise text-sm text-warn-700"
             }
           >
             {state.message}

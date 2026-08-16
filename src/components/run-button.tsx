@@ -37,13 +37,23 @@ export function RunButton({
 
   return (
     <span className="flex items-center gap-2">
-      {result ? <span className="text-xs text-ink-500">{result}</span> : null}
+      {result ? (
+        <span className="animate-fade-rise text-xs text-ink-500">{result}</span>
+      ) : null}
       <Button variant="primary" onClick={run} disabled={busy}>
-        {busy
-          ? "Processing…"
-          : pending
-            ? `Process ${pending}`
-            : "Process all"}
+        {busy ? (
+          <>
+            {/* The same breathing dot the job grid uses for "processing" —
+                one motif for "something is running", not a different spinner
+                per component. */}
+            <span aria-hidden className="breathe size-1.5 rounded-full bg-white" />
+            Processing…
+          </>
+        ) : pending ? (
+          `Process ${pending}`
+        ) : (
+          "Process all"
+        )}
       </Button>
     </span>
   );

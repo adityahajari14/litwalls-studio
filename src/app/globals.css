@@ -110,9 +110,24 @@ body::after {
   );
 }
 
-body > * {
-  position: relative;
-  z-index: 1;
+/**
+ * Wrapped in Tailwind's own `base` layer, not left bare. An unlayered rule
+ * beats EVERY layered one regardless of specificity — a class as specific as
+ * `.z-30` still loses to a bare `body > *` selector, because Tailwind's
+ * utilities live in `@layer utilities`, which is unconditionally lower
+ * priority than unlayered CSS. Left bare, this rule silently flattened the
+ * nav header's `z-30` (and the search dropdown's z-index inside it) to 1,
+ * the same as the page content beside it — and where two positioned
+ * siblings tie on z-index, the later one in DOM order paints on top. That
+ * let ordinary page content (a button, a card) paint over the search
+ * dropdown as soon as the dropdown grew tall enough to reach it — invisible
+ * with a short result list, obvious with a long one.
+ */
+@layer base {
+  body > * {
+    position: relative;
+    z-index: 1;
+  }
 }
 
 .tnum {
@@ -171,8 +186,42 @@ select {
   animation: breathe 2.4s ease-in-out infinite;
 }
 
+/**
+ * Entrance for content appearing in place — a badge mounting, a card joining
+ * a grid, a message replacing silence. Rises a few pixels rather than just
+ * fading, which is what reads as "arriving" instead of "flickering".
+ */
+@keyframes fade-rise {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+
+.animate-fade-rise {
+  animation: fade-rise 220ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/**
+ * Entrance for a floating panel — a dropdown, a popover — anchored above its
+ * trigger. Scales in from just-under-full-size rather than rising, which
+ * reads as "unfolding from the trigger" instead of drifting up from below.
+ */
+@keyframes pop-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.98);
+  }
+}
+
+.animate-pop-in {
+  animation: pop-in 160ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .breathe {
+  .breathe,
+  .animate-fade-rise,
+  .animate-pop-in {
     animation: none;
   }
 }

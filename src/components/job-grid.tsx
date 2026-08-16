@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useMemo, useState, type CSSProperties } from "react";
 
 import { BulkEditor } from "@/components/bulk-editor";
 import { Badge, Button, Empty } from "@/components/ui";
@@ -156,10 +156,15 @@ export function JobGrid({
       ) : null}
 
       <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-        {jobs.map((job) => (
+        {jobs.map((job, index) => (
           <JobCard
             key={job.id}
             job={job}
+            // A light cascade on first paint, capped so a 40-poster batch does
+            // not leave the last row waiting a visible beat to appear — past
+            // a dozen or so cards the stagger is no longer readable as one
+            // wave anyway.
+            style={{ animationDelay: `${Math.min(index, 12) * 25}ms` }}
             selected={selected.has(job.id)}
             onToggle={() => toggle(job.id)}
             onDelete={() => removeJob(job)}
@@ -175,11 +180,13 @@ function JobCard({
   selected,
   onToggle,
   onDelete,
+  style,
 }: {
   job: PosterJob;
   selected: boolean;
   onToggle: () => void;
   onDelete: () => void;
+  style?: CSSProperties;
 }) {
   // Prefer a mockup: it is what the product will actually look like. Fall
   // back to the A3 render, then to nothing while the job is still processing.
@@ -194,7 +201,7 @@ function JobCard({
   const duplicates = job.probe?.duplicates ?? [];
 
   return (
-    <li className="group relative">
+    <li className="group relative animate-fade-rise" style={style}>
       <div
         className={`overflow-hidden rounded-[--radius-card] border bg-gradient-to-b from-paper-200/80 to-paper-100 transition-all duration-200 ${
           selected
@@ -214,7 +221,7 @@ function JobCard({
               // Contain, not cover: a room mockup is mostly room, and cropping
               // it to fill the card can cut the poster itself out of frame —
               // which defeats the point of showing a thumbnail at all.
-              className="h-full w-full object-contain transition-transform duration-300 group-hover:scale-[1.03]"
+              className="h-full w-full object-contain transition-transform duration-300 animate-fade-rise group-hover:scale-[1.03]"
             />
           ) : (
             <div className="grid h-full place-items-center gap-1.5 text-xs text-ink-400">
@@ -302,17 +309,29 @@ function JobCard({
   );
 }
 
+/**
+ * `key` is the status signature, not the job id — Badge already fades in on
+ * every mount, and giving it a key that changes exactly when the status does
+ * forces React to remount (and so replay that fade) precisely when the batch
+ * runner or an SSE update moves this poster forward. A key that never changed
+ * would only ever animate once, on the card's first paint; a key that always
+ * changed (e.g. including `job.updatedAt`) would replay on every unrelated
+ * edit — reordering images, editing a tag — which reads as noise, not signal.
+ */
 function StatusBadge({ job }: { job: PosterJob }) {
+  const key = `${job.status.kind}:${job.stage}`;
   if (job.status.kind === "failed") {
     return (
-      <Badge tone="danger" title={job.status.message}>
+      <Badge key={key} tone="danger" title={job.status.message}>
         failed
       </Badge>
     );
   }
-  if (job.stage === "published") return <Badge tone="ok">published</Badge>;
-  if (job.stage === "approved") return <Badge tone="ok">approved</Badge>;
-  if (job.status.kind === "needs-review") return <Badge tone="accent">review</Badge>;
-  if (job.status.kind === "running") return <Badge>{job.status.stage}…</Badge>;
-  return <Badge>{job.stage}</Badge>;
+  if (job.stage === "published") return <Badge key={key} tone="ok">published</Badge>;
+  if (job.stage === "approved") return <Badge key={key} tone="ok">approved</Badge>;
+  if (job.status.kind === "needs-review")
+    return <Badge key={key} tone="accent">review</Badge>;
+  if (job.status.kind === "running")
+    return <Badge key={key}>{job.status.stage}…</Badge>;
+  return <Badge key={key}>{job.stage}</Badge>;
 }

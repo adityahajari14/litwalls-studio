@@ -15,8 +15,10 @@ function cx(...parts: (string | false | null | undefined)[]) {
 
 /* ── Button ──────────────────────────────────────────────────────────── */
 
+// A one-pixel rise on hover and a one-pixel press on click — the whole
+// tactile read comes from two transform states, not from a shadow or a glow.
 const BUTTON_BASE =
-  "inline-flex items-center justify-center gap-1.5 rounded-lg font-medium transition-all duration-150 active:translate-y-px disabled:cursor-not-allowed disabled:opacity-40 disabled:active:translate-y-0";
+  "inline-flex items-center justify-center gap-1.5 rounded-lg font-medium transition-all duration-150 hover:-translate-y-px active:translate-y-0 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:translate-y-0";
 
 const BUTTON_VARIANTS = {
   /* A flat indigo fill with a lit top edge. No glow — depth comes from the
@@ -117,7 +119,10 @@ export function Card({ className, ...props }: ComponentProps<"div">) {
   return (
     <div
       className={cx(
-        "rounded-[--radius-card] border border-paper-300/80 bg-gradient-to-b from-paper-200/80 to-paper-100 shadow-[--shadow-card]",
+        // transition-colors as a default, not per call site: a Card that adds
+        // a hover: border or background further down the tree gets a smooth
+        // change for free instead of every caller having to remember to add it.
+        "rounded-[--radius-card] border border-paper-300/80 bg-gradient-to-b from-paper-200/80 to-paper-100 shadow-[--shadow-card] transition-colors duration-200",
         className,
       )}
       {...props}
@@ -172,7 +177,11 @@ export function Badge({
   return (
     <span
       className={cx(
-        "inline-flex items-center gap-1 whitespace-nowrap rounded-md border px-1.5 py-0.5 text-[11px] font-medium leading-4",
+        // Fades in on mount unconditionally — cheap because it is just a CSS
+        // animation on a leaf node, and it is what turns "a badge for a new
+        // warning appeared" from a silent layout shift into something the eye
+        // actually catches.
+        "inline-flex items-center gap-1 whitespace-nowrap rounded-md border px-1.5 py-0.5 text-[11px] font-medium leading-4 animate-fade-rise",
         BADGE_TONES[tone],
         className,
       )}
