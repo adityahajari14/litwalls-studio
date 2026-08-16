@@ -6,6 +6,7 @@ import { saveSettings, type SaveState } from "@/app/settings/actions";
 import { PriceTable } from "@/components/price-table";
 import { Button } from "@/components/ui";
 import { SPLIT_SIZES } from "@/lib/print/sizes";
+import { MAX_PANEL_GAP } from "@/lib/templates/schema";
 import type { PartialPriceTable, PriceTable as Prices } from "@/lib/print/pricing";
 
 export function SettingsForm({
@@ -19,6 +20,7 @@ export function SettingsForm({
   fallbackSplitCompare,
   saved,
   border,
+  splitGap,
 }: {
   prices: PartialPriceTable;
   compareAt: PartialPriceTable;
@@ -30,9 +32,13 @@ export function SettingsForm({
   fallbackSplitCompare: PartialPriceTable;
   saved: boolean;
   border: { enabled: boolean; mm: number };
+  /** Dashboard default for the gap between split-3 panels — a percentage of
+   *  panel width. A template's own `panelGap` overrides this. */
+  splitGap: number;
 }) {
   const [borderOn, setBorderOn] = useState(border.enabled);
   const [borderMm, setBorderMm] = useState(border.mm);
+  const [gap, setGap] = useState(splitGap);
 
   const [state, formAction, pending] = useActionState<SaveState, FormData>(
     saveSettings,
@@ -120,6 +126,37 @@ export function SettingsForm({
             The real border is 0.5&nbsp;mm — a hairline that some templates
             swallow. Widen it only to make the edge legible in a mockup;
             it does not change what gets printed.
+          </p>
+        </div>
+      </div>
+
+      <div className="mt-8 border-t border-paper-300 pt-6">
+        <h3 className="text-sm font-medium text-ink-700">
+          Split-3 panel gap
+        </h3>
+        <p className="mt-1 text-xs text-ink-400">
+          How much space shows between the three panels in a split mockup, as
+          a percentage of panel width so it stays the same on screen whatever
+          the print size. A template with its own gap set uses that instead.
+        </p>
+
+        <div className="mt-3 max-w-xs">
+          <label className="block text-xs font-medium text-ink-600">
+            Gap — {gap.toFixed(1)}%
+          </label>
+          <input
+            type="range"
+            name="splitGap"
+            min={0}
+            max={MAX_PANEL_GAP * 10}
+            step={1}
+            value={Math.round(gap * 10)}
+            onChange={(e) => setGap(Number(e.target.value) / 10)}
+            className="mt-1.5 w-full accent-[var(--color-accent-500)]"
+          />
+          <p className="mt-1 text-xs text-ink-400">
+            Kept minimal by default — enough to say &ldquo;three sheets&rdquo;
+            without looking like the panels have drifted apart.
           </p>
         </div>
       </div>

@@ -34,6 +34,7 @@ export default async function SettingsPage() {
           fallbackSplitCompare={FALLBACK_SPLIT_COMPARE_AT}
           saved={settings.updatedAt > 0}
           border={settings.mockupBorder}
+          splitGap={settings.splitGap}
         />
       </Section>
     </main>

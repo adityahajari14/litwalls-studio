@@ -4,7 +4,6 @@ import { assemblePanels, composeMockup } from "@/lib/image/compose";
 import { ensureDir, jobAsset, jobDir } from "@/lib/pipeline/paths";
 import { sizeIdsFor } from "@/lib/print/sizes";
 import { isPerSize, referenceSizeOf } from "@/lib/templates/placement";
-import { DEFAULT_PANEL_GAP } from "@/lib/templates/schema";
 import { usableTemplates } from "@/lib/templates/load";
 import { readSettings } from "@/lib/pipeline/settings";
 import type { MockupTemplate, PosterJob, RenderedMockup } from "@/lib/print/types";
@@ -33,7 +32,7 @@ export async function renderMockups(job: PosterJob): Promise<RenderedMockup[]> {
   const templates = await usableTemplates();
   // The printer puts a white edge on every poster, so the mockup shows one too
   // unless it is turned off. Read once per job rather than per template.
-  const { mockupBorder } = await readSettings();
+  const { mockupBorder, splitGap: dashboardGap } = await readSettings();
   const borderMm = mockupBorder.enabled ? mockupBorder.mm : 0;
   if (templates.length === 0) return [];
 
@@ -51,7 +50,7 @@ export async function renderMockups(job: PosterJob): Promise<RenderedMockup[]> {
   // assembly twice — which for a split A3 is three 3508x4961 panels.
   const assembled = new Map<number, string | Buffer | null>();
   const posterFor = async (template: MockupTemplate) => {
-    const gap = job.kind === "split3" ? (template.panelGap ?? DEFAULT_PANEL_GAP) : 0;
+    const gap = job.kind === "split3" ? (template.panelGap ?? dashboardGap) : 0;
     if (!assembled.has(gap)) {
       assembled.set(gap, await buildPoster(job, gap, borderMm));
     }

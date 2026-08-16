@@ -48,6 +48,11 @@ export async function saveSettings(
     mm: Number.isFinite(rawMm) ? rawMm / 10 : 0.5,
   };
 
+  // Same tenths-of-a-unit encoding as borderMm, for the same reason — a 0.1%
+  // step on the slider without dealing in fractional form values.
+  const rawGap = Number(formData.get("splitGap"));
+  const splitGap = Number.isFinite(rawGap) ? rawGap / 10 : undefined;
+
   // writeSettings normalises and drops anything unparseable, so a blank field
   // clears that size's default rather than storing an empty string.
   const saved = await writeSettings({
@@ -56,6 +61,7 @@ export async function saveSettings(
     splitPrices,
     splitCompareAt,
     mockupBorder,
+    splitGap,
   });
 
   // A value the user typed that did NOT survive normalisation was garbage.

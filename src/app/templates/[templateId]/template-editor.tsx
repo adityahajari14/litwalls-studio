@@ -16,7 +16,7 @@ import {
   Segmented,
 } from "@/components/ui";
 import { SIZES } from "@/lib/print/sizes";
-import { DEFAULT_PANEL_GAP, MAX_PANEL_GAP } from "@/lib/templates/schema";
+import { MAX_PANEL_GAP } from "@/lib/templates/schema";
 import {
   hasSplitPlacement,
   physicalScale,
@@ -43,10 +43,15 @@ export function TemplateEditor({
   templateId,
   initial,
   errors,
+  defaultGap,
 }: {
   templateId: string;
   initial: MockupTemplate | null;
   errors: string[];
+  /** The dashboard's split-panel gap default — what a template with no
+   *  `panelGap` of its own actually renders at, so this editor's "blank
+   *  means" story stays true after that default is changed in Settings. */
+  defaultGap: number;
 }) {
   const router = useRouter();
 
@@ -90,7 +95,7 @@ export function TemplateEditor({
     return quadForSize(template, sizeId, isSplit);
   };
 
-  const panelGap = template.panelGap ?? DEFAULT_PANEL_GAP;
+  const panelGap = template.panelGap ?? defaultGap;
 
   /**
    * The ratio resize handles are locked to. Matches whichever orientation
@@ -542,16 +547,18 @@ export function TemplateEditor({
               </Field>
 
               <Field
-                label={`Split panel gap (${(template.panelGap ?? DEFAULT_PANEL_GAP).toFixed(1)}%)`}
-                hint="Only affects split posters. A percentage of panel width, so it stays the same on screen whatever the print size."
+                label={`Split panel gap (${panelGap.toFixed(1)}%)`}
+                hint={
+                  template.panelGap === undefined
+                    ? `Only affects split posters. Following the dashboard default (${defaultGap.toFixed(1)}%) — drag to set one for this template specifically.`
+                    : "Only affects split posters. A percentage of panel width, so it stays the same on screen whatever the print size."
+                }
               >
                 <input
                   type="range"
                   min={0}
                   max={MAX_PANEL_GAP * 10}
-                  value={Math.round(
-                    (template.panelGap ?? DEFAULT_PANEL_GAP) * 10,
-                  )}
+                  value={Math.round(panelGap * 10)}
                   onChange={(e) =>
                     setTemplate({
                       ...template,

@@ -11,6 +11,7 @@ import {
   type PartialPriceTable,
 } from "@/lib/print/pricing";
 import { SETTINGS_FILE, writeJsonAtomic } from "@/lib/pipeline/paths";
+import { DEFAULT_PANEL_GAP, MAX_PANEL_GAP } from "@/lib/templates/schema";
 
 /**
  * Dashboard-wide defaults.
@@ -50,6 +51,15 @@ export type Settings = {
    * to depict something larger than the product actually has.
    */
   mockupBorder: { enabled: boolean; mm: number };
+  /**
+   * The gap between panels in a split-3 mockup, as a PERCENTAGE OF PANEL
+   * WIDTH — same unit a template's own `panelGap` uses, since this is what
+   * a template falls back to when it does not set one itself. Dashboard-wide
+   * because most templates should agree on how visibly separated the three
+   * sheets look; a template that genuinely needs a different gap still sets
+   * its own `panelGap` and wins over this.
+   */
+  splitGap: number;
   updatedAt: number;
 };
 
@@ -67,6 +77,7 @@ export const DEFAULT_SETTINGS: Settings = {
   // On by default: the border is part of the product, so a mockup without it
   // shows something the customer will not receive.
   mockupBorder: { enabled: true, mm: TRUE_BORDER_MM },
+  splitGap: DEFAULT_PANEL_GAP,
   updatedAt: 0,
 };
 
@@ -96,6 +107,7 @@ export async function readSettings(): Promise<Settings> {
       splitPrices: normalizePriceTable(parsed.splitPrices ?? {}),
       splitCompareAt: normalizePriceTable(parsed.splitCompareAt ?? {}),
       mockupBorder: normalizeBorder(parsed.mockupBorder),
+      splitGap: normalizeSplitGap(parsed.splitGap),
       updatedAt: typeof parsed.updatedAt === "number" ? parsed.updatedAt : 0,
     };
   } catch {
@@ -109,7 +121,7 @@ export async function readSettings(): Promise<Settings> {
 
 export async function writeSettings(
   update: Pick<Settings, "prices" | "compareAt" | "splitPrices" | "splitCompareAt"> &
-    Partial<Pick<Settings, "mockupBorder">>,
+    Partial<Pick<Settings, "mockupBorder" | "splitGap">>,
 ): Promise<Settings> {
   const settings: Settings = {
     prices: normalizePriceTable(update.prices),
@@ -117,6 +129,7 @@ export async function writeSettings(
     splitPrices: normalizePriceTable(update.splitPrices),
     splitCompareAt: normalizePriceTable(update.splitCompareAt),
     mockupBorder: normalizeBorder(update.mockupBorder),
+    splitGap: normalizeSplitGap(update.splitGap),
     updatedAt: Date.now(),
   };
   await writeJsonAtomic(SETTINGS_FILE, settings);
@@ -143,4 +156,15 @@ function normalizeBorder(input: unknown): Settings["mockupBorder"] {
     enabled: raw?.enabled !== false,
     mm,
   };
+}
+
+/**
+ * Clamp the dashboard's split-panel gap the same way `schema.ts` clamps a
+ * template's own `panelGap` — 0 to `MAX_PANEL_GAP`, falling back to
+ * `DEFAULT_PANEL_GAP` for anything absent or unusable in a hand-edited file.
+ */
+function normalizeSplitGap(input: unknown): number {
+  return typeof input === "number" && Number.isFinite(input)
+    ? Math.min(MAX_PANEL_GAP, Math.max(0, input))
+    : DEFAULT_PANEL_GAP;
 }
