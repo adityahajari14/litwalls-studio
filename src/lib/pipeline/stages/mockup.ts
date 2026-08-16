@@ -41,12 +41,24 @@ export async function renderMockups(job: PosterJob): Promise<RenderedMockup[]> {
 
   await ensureDir(`${jobDir(job.batchId, job.id)}/mockups`);
 
-  const poster = await posterFor(job);
-  if (!poster) return [];
+  // Assembled per gap rather than once, because the gap is now a template
+  // setting. Memoised so two templates sharing a gap do not pay for the
+  // assembly twice — which for a split A3 is three 3508x4961 panels.
+  const assembled = new Map<number, string | Buffer | null>();
+  const posterFor = async (template: MockupTemplate) => {
+    const gap = job.kind === "split3" ? (template.panelGap ?? DEFAULT_PANEL_GAP) : 0;
+    if (!assembled.has(gap)) {
+      assembled.set(gap, await buildPoster(job, gap));
+    }
+    return assembled.get(gap) ?? null;
+  };
 
   const rendered: RenderedMockup[] = [];
 
   for (const template of chosen) {
+    const poster = await posterFor(template);
+    if (!poster) continue;
+
     // A per-size template produces one mockup per variant, each showing the
     // poster at its true relative scale on the wall. Everything else produces
     // a single shared image — four times the renders is not worth paying on
@@ -95,7 +107,10 @@ export async function renderMockups(job: PosterJob): Promise<RenderedMockup[]> {
  * A split product is sold as a set, so the mockup has to show the set. A
  * single panel on a wall would misrepresent what arrives.
  */
-async function posterFor(job: PosterJob): Promise<string | Buffer | null> {
+async function buildPoster(
+  job: PosterJob,
+  gapPercent: number,
+): Promise<string | Buffer | null> {
   if (job.kind === "split3") {
     const panels = job.assets
       .filter((a) => a.sizeId === MOCKUP_SOURCE_SIZE && a.panel !== null)
@@ -105,7 +120,7 @@ async function posterFor(job: PosterJob): Promise<string | Buffer | null> {
 
     return assemblePanels(
       panels.map((p) => jobAsset(job.batchId, job.id, p.relPath)),
-      DEFAULT_PANEL_GAP,
+      gapPercent,
     );
   }
 

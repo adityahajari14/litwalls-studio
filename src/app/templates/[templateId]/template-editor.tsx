@@ -16,6 +16,7 @@ import {
   Segmented,
 } from "@/components/ui";
 import { SIZES } from "@/lib/print/sizes";
+import { DEFAULT_PANEL_GAP, MAX_PANEL_GAP } from "@/lib/templates/schema";
 import {
   physicalScale,
   scaleQuad,
@@ -420,7 +421,28 @@ export function TemplateEditor({
                       shadow: Number(e.target.value) / 100,
                     })
                   }
-                  className="w-full accent-[var(--color-accent-600)]"
+                  className="w-full accent-[var(--color-accent-500)]"
+                />
+              </Field>
+
+              <Field
+                label={`Split panel gap (${(template.panelGap ?? DEFAULT_PANEL_GAP).toFixed(1)}%)`}
+                hint="Only affects split posters. A percentage of panel width, so it stays the same on screen whatever the print size."
+              >
+                <input
+                  type="range"
+                  min={0}
+                  max={MAX_PANEL_GAP * 10}
+                  value={Math.round(
+                    (template.panelGap ?? DEFAULT_PANEL_GAP) * 10,
+                  )}
+                  onChange={(e) =>
+                    setTemplate({
+                      ...template,
+                      panelGap: Number(e.target.value) / 10,
+                    })
+                  }
+                  className="w-full accent-[var(--color-accent-500)]"
                 />
               </Field>
             </div>

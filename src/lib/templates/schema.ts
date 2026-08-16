@@ -112,8 +112,17 @@ export function validateTemplate(input: unknown): ValidationResult {
       errors.push('"shadow", if present, must be between 0 and 1.');
     }
   }
-  if (t.panelGap !== undefined && !isPositiveInt(t.panelGap)) {
-    errors.push('"panelGap", if present, must be a positive number of pixels.');
+  if (t.panelGap !== undefined) {
+    if (
+      typeof t.panelGap !== "number" ||
+      !Number.isFinite(t.panelGap) ||
+      t.panelGap < 0 ||
+      t.panelGap > MAX_PANEL_GAP
+    ) {
+      errors.push(
+        `"panelGap", if present, must be between 0 and ${MAX_PANEL_GAP} — it is a percentage of panel width, not pixels.`,
+      );
+    }
   }
 
   if (errors.length > 0) return { ok: false, errors };
@@ -187,5 +196,19 @@ function validateSizing(input: unknown, kind: unknown): string[] {
   return errors;
 }
 
-/** Default gap between split panels in a mockup, in canvas pixels. */
-export const DEFAULT_PANEL_GAP = 12;
+/**
+ * Default gap between split panels, as a PERCENTAGE OF PANEL WIDTH.
+ *
+ * A percentage rather than pixels because the assembled strip is scaled down
+ * by roughly twelve times to sit on a mockup wall: a pixel gap set at print
+ * resolution arrives sub-pixel and vanishes, which is why split mockups read
+ * as one wide poster.
+ *
+ * 1.2% is deliberately minimal — on a three-panel A3 set that is a hairline a
+ * couple of millimetres wide at print scale. Enough to say "three sheets"
+ * without looking like the panels have drifted apart.
+ */
+export const DEFAULT_PANEL_GAP = 1.2;
+
+/** Nothing above this reads as a deliberate gap rather than a layout error. */
+export const MAX_PANEL_GAP = 6;

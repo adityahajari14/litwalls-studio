@@ -364,7 +364,14 @@ type TemplateBase = {
   canvas: { width: number; height: number };
   shadow?: number;
   suitsAspect?: number[];
-  /** Canvas-px gap between panels, split jobs only. Default 12. */
+  /**
+   * Gap between the three panels of a split poster, as a PERCENTAGE OF PANEL
+   * WIDTH. Split jobs only. Default 1.2.
+   *
+   * A percentage, not pixels: the assembled strip is scaled down heavily to
+   * sit on a mockup wall, so a pixel gap set at print resolution arrives
+   * sub-pixel and vanishes.
+   */
   panelGap?: number;
 };
 

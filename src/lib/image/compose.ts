@@ -21,10 +21,22 @@ import type { MockupTemplate, Pt, SizeId } from "@/lib/print/types";
  * for how it is implemented.
  */
 
-/** Assemble split panels into one image, with a visible gap between them. */
+/**
+ * Assemble split panels into one image, with a gap between them.
+ *
+ * `gapPercent` is a PERCENTAGE OF PANEL WIDTH, not a pixel count, and that is
+ * the whole point. A fixed pixel gap is specified at print resolution — an A3
+ * panel is 3508px wide — and the assembled strip is then scaled down by
+ * roughly twelve times to sit on a mockup wall. A 12px gap arrives as 0.8px
+ * and disappears into the JPEG, which is why split mockups looked like one
+ * wide poster rather than three.
+ *
+ * As a fraction of panel width it survives any scaling, so what is set here is
+ * what shows up on the wall.
+ */
 export async function assemblePanels(
   panelPaths: string[],
-  gap: number,
+  gapPercent: number,
 ): Promise<Buffer> {
   const metas = await Promise.all(
     panelPaths.map((path) => sharp(path).metadata()),
@@ -32,6 +44,14 @@ export async function assemblePanels(
 
   const widths = metas.map((m) => m.width ?? 0);
   const height = Math.max(...metas.map((m) => m.height ?? 0));
+
+  // At least 1px so a non-zero setting never rounds away to nothing on a
+  // small panel, and 0 still means genuinely no gap.
+  const gap =
+    gapPercent > 0
+      ? Math.max(1, Math.round((widths[0] * gapPercent) / 100))
+      : 0;
+
   const totalWidth =
     widths.reduce((a, b) => a + b, 0) + gap * (panelPaths.length - 1);
 
