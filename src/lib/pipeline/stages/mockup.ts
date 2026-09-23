@@ -2,8 +2,13 @@ import "server-only";
 
 import { assemblePanels, composeMockup } from "@/lib/image/compose";
 import { ensureDir, jobAsset, jobDir } from "@/lib/pipeline/paths";
+import { printOrientation } from "@/lib/print/orientation";
 import { sizeIdsFor } from "@/lib/print/sizes";
-import { isPerSize, referenceSizeOf } from "@/lib/templates/placement";
+import {
+  isPerSize,
+  referenceSizeOf,
+  templateSuits,
+} from "@/lib/templates/placement";
 import { usableTemplates } from "@/lib/templates/load";
 import { readSettings } from "@/lib/pipeline/settings";
 import type { MockupTemplate, PosterJob, RenderedMockup } from "@/lib/print/types";
@@ -57,6 +62,14 @@ export async function renderMockups(job: PosterJob): Promise<RenderedMockup[]> {
     return assembled.get(gap) ?? null;
   };
 
+  // The shape of the PRINT FILES this mockup places — the same answer the
+  // crop stage cut them to. Derived from the shared helper rather than
+  // compared inline here, because the two used to disagree about a square
+  // source and the mockup then showed a shape the customer would not receive.
+  // Meaningless for a split set, whose assembled panel shape is fixed
+  // whichever way round the source is, so composeMockup ignores it there.
+  const isLandscape = printOrientation(job) === "landscape";
+
   const rendered: RenderedMockup[] = [];
 
   for (const template of chosen) {
@@ -90,6 +103,10 @@ export async function renderMockups(job: PosterJob): Promise<RenderedMockup[]> {
           // one — the assembled triptych is a different shape from a single
           // sheet and needs its own box on the wall, not the portrait one.
           isSplit: job.kind === "split3",
+          // Selects the template's landscape-specific placement box, when it
+          // has one — a wide single poster fills a wide area of the wall
+          // rather than being shrunk into the portrait box.
+          isLandscape,
           outPath: jobAsset(job.batchId, job.id, relPath),
         });
         rendered.push({
@@ -148,15 +165,29 @@ async function buildPoster(
  * A portrait template flatters a portrait poster; a wide split set needs a
  * wide one. Templates without a declared `suitsAspect` are treated as
  * general-purpose and rank behind an explicit match.
+ *
+ * A template whose author has declared it unsuitable for this poster's kind
+ * or orientation (`suits`) is dropped outright — but only if that leaves
+ * something to render. A library where every template is portrait-only should
+ * still produce a mockup for a landscape poster rather than none.
  */
 function pickAutomatic(
   templates: MockupTemplate[],
   job: PosterJob,
 ): MockupTemplate[] {
+  const poster = {
+    kind: job.kind,
+    orientation: printOrientation(job),
+  };
+  const suitable = templates.filter((template) =>
+    templateSuits(template, poster),
+  );
+  const pool = suitable.length > 0 ? suitable : templates;
+
   const aspect =
     job.probe && job.probe.height > 0 ? job.probe.width / job.probe.height : 1;
 
-  const scored = templates.map((template) => {
+  const scored = pool.map((template) => {
     const suits = template.suitsAspect;
     if (!suits || suits.length === 0) return { template, distance: 1 };
     const best = Math.min(...suits.map((value) => Math.abs(value - aspect)));

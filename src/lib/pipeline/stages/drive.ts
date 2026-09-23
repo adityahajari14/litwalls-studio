@@ -3,6 +3,7 @@ import "server-only";
 import { ensureFolderPath, uploadFile } from "@/lib/drive/files";
 import { jobAsset } from "@/lib/pipeline/paths";
 import { readBatch, updateJob } from "@/lib/pipeline/store";
+import { mainCategoryFor } from "@/lib/print/categories";
 import { formatTitle } from "@/lib/print/title";
 import { err, ok, type Result } from "@/lib/result";
 import type { DriveRefs, PosterJob } from "@/lib/print/types";
@@ -48,6 +49,11 @@ function mimeFor(relPath: string): string {
  * batched at the end, so a crash or a lost connection loses at most one file's
  * worth of work instead of the whole poster's.
  */
+/** Where a poster with no collection yet is filed on Drive. A real folder
+ *  rather than the Drive root, so these are easy to find and re-file once
+ *  someone picks a collection. */
+const UNFILED_FOLDER = "Unfiled";
+
 export async function uploadToDrive(job: PosterJob): Promise<Result<DriveRefs>> {
   const batch = await readBatch(job.batchId);
   if (!batch) return err(`Batch not found for job ${job.id}`);
@@ -61,6 +67,12 @@ export async function uploadToDrive(job: PosterJob): Promise<Result<DriveRefs>> 
     return err("Set a subject before filing to Drive — it names the folder.");
   }
 
+  // The MAIN collection, which on an auto batch is the one the model picked
+  // for this poster rather than one the batch carries. It both names the
+  // parent folder and supplies the title suffix that is then stripped back
+  // off, so the two cannot drift onto different collections.
+  const category = mainCategoryFor(job, batch);
+
   // The folder is named for the product so it can be found from a Shopify
   // order. The sequence is a placeholder until publish assigns the real one.
   const folderName = safeFolderName(
@@ -70,12 +82,15 @@ export async function uploadToDrive(job: PosterJob): Promise<Result<DriveRefs>> 
         sequence: job.metadata?.sequence ?? 1,
         subtitle: job.metadata?.subtitle,
       },
-      batch.category,
+      // The suffix is stripped off the very next line, so a poster not yet
+      // filed into a collection files fine — it just lands under "Unfiled"
+      // rather than blocking an upload that has nothing to do with Shopify.
+      category ?? { suffix: "" },
     ).replace(/\s*\|.*$/, ""),
   );
 
   const folder = await ensureFolderPath([
-    batch.category.label,
+    category?.label ?? UNFILED_FOLDER,
     folderName,
   ]);
   if (!folder.ok) return folder;

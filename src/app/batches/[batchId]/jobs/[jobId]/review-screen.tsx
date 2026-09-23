@@ -18,11 +18,19 @@ import {
   Segmented,
   Textarea,
 } from "@/components/ui";
+import { categoriesFor, isAutoBatch } from "@/lib/print/categories";
+import {
+  missingTags,
+  ORIENTATION_TAGS,
+  requiredTagsFor,
+} from "@/lib/print/tags";
+import { productOrientation } from "@/lib/print/orientation";
 import { sizesFor } from "@/lib/print/sizes";
 import { formatTitle } from "@/lib/print/title";
 import type { PartialPriceTable, PriceTable as Prices } from "@/lib/print/pricing";
 import type {
   Batch,
+  Category,
   NormRect,
   PosterJob,
   ProductImageRef,
@@ -64,6 +72,24 @@ export function ReviewScreen({
   const [subtitle, setSubtitle] = useState(job.metadata?.subtitle ?? "");
   const [tags, setTags] = useState((job.metadata?.tags ?? []).join(", "));
   const [altText, setAltText] = useState(job.metadata?.altText ?? "");
+  const [description, setDescription] = useState(
+    job.metadata?.description ?? "",
+  );
+  /**
+   * The collections this poster publishes into, MAIN FIRST.
+   *
+   * Held as handles rather than whole `Category` objects because the server
+   * re-resolves them against live Shopify on save — sending back a snapshot
+   * the browser has been holding for an hour would be the stale data the
+   * batch endpoint already refuses.
+   */
+  const [categoryIds, setCategoryIds] = useState<string[]>(() =>
+    categoriesFor(job, batch).map((c) => c.id),
+  );
+  // Every collection that can be picked. Null while loading, so "none
+  // available" and "not asked yet" stay distinguishable.
+  const [available, setAvailable] = useState<Category[] | null>(null);
+
   const [selected, setSelected] = useState(
     job.selectedTemplateIds.length > 0
       ? job.selectedTemplateIds
@@ -79,6 +105,21 @@ export function ReviewScreen({
           templateId: m.templateId,
         })),
   );
+
+  useEffect(() => {
+    let cancelled = false;
+    void fetch("/api/categories")
+      .then((response) => response.json())
+      .then((body) => {
+        if (!cancelled) setAvailable(body.categories ?? []);
+      })
+      .catch(() => {
+        if (!cancelled) setAvailable([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const assetUrl = useCallback(
     (relPath: string) => `/api/assets/${job.batchId}/${job.id}/${relPath}`,
@@ -96,12 +137,24 @@ export function ReviewScreen({
         subtitle,
         tags: tags.split(",").map((t) => t.trim()).filter(Boolean),
         altText,
+        description,
       },
       cropOverrides: crops,
+      categoryIds,
       selectedTemplateIds: selected,
       images,
     }),
-    [subject, subtitle, tags, altText, crops, selected, images],
+    [
+      subject,
+      subtitle,
+      tags,
+      altText,
+      description,
+      crops,
+      categoryIds,
+      selected,
+      images,
+    ],
   );
 
   const patch = useCallback(
@@ -241,12 +294,53 @@ export function ReviewScreen({
     return () => window.removeEventListener("keydown", onKey);
   }, [go, position.nextId, position.prevId, approve, save]);
 
-  const previewTitle = subject
-    ? formatTitle(
-        { subject, sequence: job.metadata?.sequence ?? 1, subtitle },
-        batch.category,
-      )
-    : "—";
+  /**
+   * The collections as they stand in this form, main first — not what is on
+   * the job, so the title preview and the tag list move as soon as a chip is
+   * clicked rather than after a save.
+   */
+  const chosen = (available ?? [])
+    .filter((c) => categoryIds.includes(c.id))
+    .sort((a, b) => categoryIds.indexOf(a.id) - categoryIds.indexOf(b.id));
+  // Falls back to the job's stored snapshot while the live list is loading,
+  // so the title does not flash an em dash on every page load.
+  const main = chosen[0] ?? categoriesFor(job, batch)[0] ?? null;
+
+  const previewTitle =
+    subject && main
+      ? formatTitle(
+          { subject, sequence: job.metadata?.sequence ?? 1, subtitle },
+          main,
+        )
+      : "—";
+
+  const orientation = productOrientation(job);
+  // Exactly what the publisher will add, from the same function it calls —
+  // so what is shown here cannot drift from what goes to Shopify.
+  const autoTags = requiredTagsFor({
+    categories: chosen.length > 0 ? chosen : categoriesFor(job, batch),
+    orientation,
+    kind: job.kind,
+  });
+  const manualTags = tags.split(",").map((t) => t.trim()).filter(Boolean);
+  // Only the ones actually missing — a tag the model already wrote is not
+  // listed twice.
+  const addedTags = missingTags(manualTags, autoTags);
+
+  /** Toggle a collection on or off. The first one clicked becomes the main. */
+  function toggleCategory(id: string) {
+    setCategoryIds((current) =>
+      current.includes(id)
+        ? current.filter((c) => c !== id)
+        : [...current, id],
+    );
+  }
+
+  /** Promote a collection to main — it is the one whose name ends the title,
+   *  so it is worth being able to change without unpicking the rest. */
+  function makeMain(id: string) {
+    setCategoryIds((current) => [id, ...current.filter((c) => c !== id)]);
+  }
 
   const lowRes = job.assets.some((a) => a.sizeId === sizeId && a.lowRes);
   const aiCrop = job.aiCrops?.[sizeId];
@@ -269,11 +363,16 @@ export function ReviewScreen({
                 {Math.round(job.probe.coverage * 100)}% of artwork used
               </Badge>
             ) : null}
-            {/* The batch picks one collection, but batches are often mixed.
-                A suggestion is never applied automatically — moving a product
-                changes its title suffix, and doing that silently would be
-                worse than the occasional misfile. */}
-            {job.metadata?.suggestedCategoryId &&
+            {/* The one thing about a poster that is invisible in its title,
+                and the thing the whole landscape placement path turns on. */}
+            <Badge>{ORIENTATION_TAGS[orientation].toLowerCase()}</Badge>
+            {/* On a FIXED batch the model's pick is a suggestion and nothing
+                more: moving a product changes its title suffix, and doing
+                that silently would be worse than the occasional misfile. An
+                auto batch has already applied it, so there is nothing to
+                disagree with. */}
+            {batch.category &&
+            job.metadata?.suggestedCategoryId &&
             job.metadata.suggestedCategoryId !== batch.category.id ? (
               <Badge
                 tone="warn"
@@ -281,6 +380,9 @@ export function ReviewScreen({
               >
                 maybe {job.metadata.suggestedCategoryId}?
               </Badge>
+            ) : null}
+            {isAutoBatch(batch) && categoryIds.length === 0 ? (
+              <Badge tone="warn">not filed — pick a collection</Badge>
             ) : null}
             {published ? <Badge tone="ok">published</Badge> : null}
             {job.drive ? <Badge tone="ok">on Drive</Badge> : null}
@@ -432,16 +534,102 @@ export function ReviewScreen({
             </div>
           </Section>
 
+          <Section title="Collections">
+            {available === null ? (
+              <p className="text-xs text-ink-400">Loading collections…</p>
+            ) : available.length === 0 ? (
+              <p className="text-xs text-warn-700">
+                Could not read collections from Shopify. This poster will
+                publish into {main?.label ?? "nothing"}.
+              </p>
+            ) : (
+              <>
+                <div className="flex flex-wrap gap-1.5">
+                  {available.map((option) => {
+                    const picked = categoryIds.includes(option.id);
+                    const isMain = main?.id === option.id;
+                    return (
+                      <button
+                        key={option.id}
+                        type="button"
+                        // A picked chip promotes rather than un-picking:
+                        // choosing the main collection is the frequent edit,
+                        // and unpicking is one more click away on the ×.
+                        onClick={() =>
+                          picked ? makeMain(option.id) : toggleCategory(option.id)
+                        }
+                        title={
+                          isMain
+                            ? "The main collection — its name ends the title."
+                            : picked
+                              ? "Click to make this the main collection."
+                              : "Click to add this collection."
+                        }
+                        className={`rounded-full border px-2.5 py-0.5 text-xs transition-colors ${
+                          isMain
+                            ? "border-accent-500 bg-accent-500 text-white"
+                            : picked
+                              ? "border-accent-500 bg-paper-200 text-ink-800"
+                              : "border-paper-300 bg-paper-100 text-ink-500 hover:border-paper-400"
+                        }`}
+                      >
+                        {isMain ? "★ " : ""}
+                        {option.label}
+                        {picked && !isMain ? (
+                          <span
+                            role="button"
+                            tabIndex={-1}
+                            aria-label={`Remove ${option.label}`}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              toggleCategory(option.id);
+                            }}
+                            className="ml-1 text-ink-400 hover:text-danger-700"
+                          >
+                            ×
+                          </span>
+                        ) : null}
+                      </button>
+                    );
+                  })}
+                </div>
+                <p className="mt-1.5 text-xs text-ink-400">
+                  {categoryIds.length === 0
+                    ? "Not filed anywhere — publishing will stop and ask."
+                    : main
+                      ? `★ ${main.label} names the product; the rest add their tag so it shows up there too.`
+                      : null}
+                </p>
+              </>
+            )}
+          </Section>
+
           <Section title="Tags">
             <Input
               value={tags}
               onChange={(e) => setTags(e.target.value)}
               placeholder="Spider Man, Movies"
             />
-            <p className="mt-1 text-xs text-ink-400">
-              <code className="font-mono">{batch.category.tag ?? "none"}</code>{" "}
-              is added automatically — it is what puts this in the collection.
-            </p>
+            {/* Shown rather than described, because these are the tags with
+                consequences: every collection here is keyed on one, so a
+                product missing its tag is live and appears nowhere. */}
+            {addedTags.length > 0 ? (
+              <p className="mt-1.5 flex flex-wrap items-center gap-1 text-xs text-ink-400">
+                <span>added on publish:</span>
+                {addedTags.map((tag) => (
+                  <code
+                    key={tag}
+                    className="rounded bg-paper-200 px-1 font-mono text-ink-700"
+                  >
+                    {tag}
+                  </code>
+                ))}
+              </p>
+            ) : (
+              <p className="mt-1.5 text-xs text-ink-400">
+                Every tag this needs is already here.
+              </p>
+            )}
           </Section>
 
           <Section title="Alt text">
@@ -452,6 +640,21 @@ export function ReviewScreen({
               maxLength={125}
               placeholder="Spider-Man swinging between skyscrapers at sunset"
             />
+          </Section>
+
+          <Section title="Description">
+            <Textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              rows={5}
+              maxLength={600}
+              placeholder="High-definition wall poster of Spider Man, printed on thick matte paper for sharp detail and rich colour…"
+            />
+            <p className="mt-1 text-xs text-ink-400">
+              The product page&rsquo;s opening paragraph, written by Gemini
+              for this poster. Blank falls back to a plain line built from
+              the subject.
+            </p>
           </Section>
 
           <Section title="Product images">

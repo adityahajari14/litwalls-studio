@@ -1,4 +1,5 @@
 import { loadTemplate } from "@/lib/templates/load";
+import { isTemplateProcessing } from "@/lib/templates/processing";
 import {
   deleteTemplate,
   replaceBackground,
@@ -10,8 +11,11 @@ export async function GET(
   ctx: RouteContext<"/api/templates/[templateId]">,
 ) {
   const { templateId } = await ctx.params;
-  const entry = await loadTemplate(templateId);
-  return Response.json({ entry });
+  const [entry, processing] = await Promise.all([
+    loadTemplate(templateId),
+    isTemplateProcessing(templateId),
+  ]);
+  return Response.json({ entry, processing });
 }
 
 /** Save an edited template — placement, name, shadow, per-size areas. */

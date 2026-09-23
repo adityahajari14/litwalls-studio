@@ -1,3 +1,4 @@
+import type { Orientation } from "@/lib/print/orientation";
 import type { NormRect, PosterKind, SizeId } from "@/lib/print/types";
 
 /**
@@ -139,7 +140,7 @@ export function dpiFor(
  */
 export function targetPixels(
   sizeId: SizeId,
-  orientation: "portrait" | "landscape",
+  orientation: Orientation,
 ): { width: number; height: number } {
   const size = printSize(sizeId);
   const long = Math.max(size.minWidth, size.minHeight);
@@ -172,16 +173,32 @@ export function targetPanelPixels(sizeId: SizeId): {
 /**
  * The aspect ratio the source must be cropped to before slicing.
  *
- * For a normal poster this is the size's own aspect. For a split poster the
- * three sheets sit side by side, so the artwork spans three portrait sheets:
- * three times as wide, one sheet tall. For A-series that is 3 x 0.707 = 2.121.
+ * MUST agree with `targetPixels`, and this is the whole reason `orientation`
+ * is a parameter rather than assumed. `renderOne` extracts a region of this
+ * aspect and resizes it into `targetPixels` with `fit: "fill"` — no
+ * letterboxing, no further cropping — so if this returns a portrait ratio
+ * while `targetPixels` hands back landscape dimensions, the artwork is
+ * squashed to half its width and nothing anywhere reports an error. That is
+ * exactly what happened to every landscape poster before this took an
+ * orientation.
  *
- * This is deliberately independent of the source's orientation — the panels
- * are always portrait, so the crop always has to be this shape.
+ * For a normal poster this is the size's own aspect, the right way round for
+ * the artwork. For a split poster the three sheets sit side by side, so the
+ * artwork spans three PORTRAIT sheets: three times as wide, one sheet tall.
+ * For A-series that is 3 x 0.707 = 2.121.
+ *
+ * `orientation` is deliberately ignored for a split poster — the panels are
+ * always portrait sheets (see `targetPanelPixels`), so the crop always has to
+ * be this shape whichever way round the source is.
  */
-export function cropAspectFor(sizeId: SizeId, kind: PosterKind): number {
+export function cropAspectFor(
+  sizeId: SizeId,
+  kind: PosterKind,
+  orientation: Orientation,
+): number {
   const aspect = aspectFor(sizeId);
-  return kind === "split3" ? aspect * 3 : aspect;
+  if (kind === "split3") return aspect * 3;
+  return orientation === "landscape" ? 1 / aspect : aspect;
 }
 
 /**

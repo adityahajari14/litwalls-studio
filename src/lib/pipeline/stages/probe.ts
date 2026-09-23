@@ -6,6 +6,7 @@ import sharp from "sharp";
 import { fingerprint } from "@/lib/image/fingerprint";
 import { jobAsset } from "@/lib/pipeline/paths";
 import { findDuplicates } from "@/lib/pipeline/registry";
+import { orientationOf } from "@/lib/print/orientation";
 import {
   cropAspectFor,
   DPI_FLOOR,
@@ -77,10 +78,15 @@ export function coverageFor(
   kind: PosterJob["kind"],
 ): number {
   const sourceAspect = px.width / px.height;
+  // A landscape source is cropped to a landscape sheet, so the demanding
+  // shape is the size's aspect turned the same way round. Measuring it
+  // against the portrait ratio reported a wide poster as losing half its
+  // artwork when it loses none.
+  const orientation = kind === "split3" ? "portrait" : orientationOf(px);
   let worst = 1;
 
   for (const sizeId of sizeIdsFor(kind)) {
-    const target = cropAspectFor(sizeId, kind);
+    const target = cropAspectFor(sizeId, kind, orientation);
     // The largest rect of `target` aspect inside the source keeps this
     // fraction of the total area — one edge is always fully used.
     const kept =

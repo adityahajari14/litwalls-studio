@@ -8,10 +8,13 @@
     "start": "next start",
     "lint": "eslint",
     "check:drift": "node scripts/check-drift.mjs",
-    "test": "node --conditions react-server --import ./tests/alias-hook.mjs --test \"tests/**/*.test.ts\""
+    "test": "node --conditions react-server --import ./tests/alias-hook.mjs --test \"tests/**/*.test.ts\"",
+    "models:fetch": "node scripts/fetch-upscale-model.mjs",
+    "postinstall": "node scripts/fetch-upscale-model.mjs"
   },
   "dependencies": {
     "next": "16.2.12",
+    "onnxruntime-node": "^1.27.0",
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "server-only": "^0.0.1",

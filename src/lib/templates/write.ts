@@ -4,8 +4,17 @@ import { mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import sharp from "sharp";
 
+import { analyzeWallPlacement } from "@/lib/gemini/placement";
+import { upscaleAssetInPlace } from "@/lib/image/upscale-asset";
 import { TEMPLATES_DIR, writeJsonAtomic } from "@/lib/pipeline/paths";
+import { loadTemplate } from "@/lib/templates/load";
+import { referenceSizeOf } from "@/lib/templates/placement";
+import {
+  clearTemplateProcessing,
+  markTemplateProcessing,
+} from "@/lib/templates/processing";
 import { validateTemplate } from "@/lib/templates/schema";
+import { runBackground } from "@/lib/tasks";
 import { err, ok, type Result } from "@/lib/result";
 import type { MockupTemplate } from "@/lib/print/types";
 
@@ -123,7 +132,76 @@ export async function createTemplate(input: {
     await rm(dir, { recursive: true, force: true });
     return saved;
   }
+
+  // The starter rect above is a placeholder. Hand off to a background job that
+  // sharpens the photo and asks the model where a real poster hangs on it —
+  // the editor shows an "analysing…" banner until it lands.
+  enqueueBackgroundAnalysis(id);
+
   return ok(template);
+}
+
+/**
+ * Upscale a freshly uploaded background and set its placement from the photo.
+ *
+ * Fire-and-forget: the upload response has already returned and the editor is
+ * open, polling for the `.processing` marker this drops. Every step degrades
+ * to a no-op on failure — a missing model file, no `GEMINI_API_KEY` — so the
+ * worst case is the template keeps its centred starter rect.
+ */
+export function enqueueBackgroundAnalysis(id: string): void {
+  const key = `template-analysis:${id}`;
+  void markTemplateProcessing(id);
+  void runBackground(key, async () => {
+    try {
+      const dir = join(TEMPLATES_DIR, id);
+      const backgroundPath = join(dir, "background.jpg");
+
+      // Upscale failure (no model file, a decode error) must not also cost the
+      // AI placement — they are independent improvements.
+      let dims: { width: number; height: number } | null = null;
+      try {
+        dims = await upscaleAssetInPlace(backgroundPath, {
+          encode: "jpeg",
+          maxLongEdge: MAX_CANVAS_EDGE,
+        });
+      } catch (cause) {
+        console.warn(
+          `template ${id}: background upscale failed — ${cause instanceof Error ? cause.message : String(cause)}`,
+        );
+      }
+
+      const entry = await loadTemplate(id);
+      if (!entry.ok) return;
+      const template = entry.template;
+      const canvas = dims ?? template.canvas;
+
+      const placement = await analyzeWallPlacement({
+        image: backgroundPath,
+        canvas,
+        referenceSize: referenceSizeOf(template),
+      });
+
+      const base = placement.base;
+      const next: MockupTemplate =
+        template.kind === "flat"
+          ? {
+              ...template,
+              canvas,
+              rect: base,
+              sizing: {
+                ...(template.sizing ?? {}),
+                referenceSize: placement.referenceSize,
+                base,
+              },
+            }
+          : { ...template, canvas };
+
+      await saveTemplate(next);
+    } finally {
+      await clearTemplateProcessing(id);
+    }
+  });
 }
 
 /** Write a template, refusing anything that would not render. */
@@ -178,6 +256,10 @@ export async function replaceBackground(
     .resize(width, height, { fit: "fill" })
     .jpeg({ quality: 88 })
     .toFile(join(TEMPLATES_DIR, id, "background.jpg"));
+
+  // A new photo means a new wall — upscale it and re-derive the placement,
+  // same as a fresh template. The editor warns the author to check it.
+  enqueueBackgroundAnalysis(id);
 
   return ok({ width, height });
 }

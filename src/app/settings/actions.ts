@@ -53,6 +53,8 @@ export async function saveSettings(
   const rawGap = Number(formData.get("splitGap"));
   const splitGap = Number.isFinite(rawGap) ? rawGap / 10 : undefined;
 
+  const descriptionTemplate = String(formData.get("descriptionTemplate") ?? "");
+
   // writeSettings normalises and drops anything unparseable, so a blank field
   // clears that size's default rather than storing an empty string.
   const saved = await writeSettings({
@@ -62,6 +64,7 @@ export async function saveSettings(
     splitCompareAt,
     mockupBorder,
     splitGap,
+    descriptionTemplate,
   });
 
   // A value the user typed that did NOT survive normalisation was garbage.

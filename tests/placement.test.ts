@@ -2,6 +2,9 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import {
+  flipRect,
+  hasLandscapePlacement,
+  hasSplitVerticalPlacement,
   physicalScale,
   quadForSize,
   rectForSize,
@@ -203,4 +206,221 @@ test("a split override wins over the derived split placement", () => {
 
   assert.deepEqual(rectForSize(template, "A5", true), custom);
   assert.notDeepEqual(rectForSize(template, "A4", true), custom);
+});
+
+test("without a landscape placement, the portrait box is turned on its side", () => {
+  // Not the portrait rect unchanged. `fitRect` scales the poster to touch
+  // whichever edge binds first, so a wide poster handed a tall box is bound
+  // by WIDTH and ends up occupying roughly half the wall area the template
+  // author drew — correct geometry, obviously wrong result.
+  const fallback = rectForSize(FLAT, "A3", false, true);
+
+  assert.equal(fallback.width, FLAT.rect.height);
+  assert.equal(fallback.height, FLAT.rect.width);
+  // Same centre: a poster does not move across the wall because it is wide.
+  assert.equal(
+    fallback.x + fallback.width / 2,
+    FLAT.rect.x + FLAT.rect.width / 2,
+  );
+  assert.equal(
+    fallback.y + fallback.height / 2,
+    FLAT.rect.y + FLAT.rect.height / 2,
+  );
+});
+
+test("a turned fallback box stays on the canvas", () => {
+  // A tall box near the left edge becomes wider than the space beside it.
+  // sharp rejects a negative composite offset outright, so this must clamp
+  // rather than hand back a rect that hangs off the wall.
+  const template = {
+    ...FLAT,
+    canvas: { width: 1200, height: 1500 },
+    rect: { x: 20, y: 200, width: 700, height: 990 },
+  };
+  const fallback = rectForSize(template, "A3", false, true);
+
+  assert.ok(fallback.x >= 0, `x should be on canvas, got ${fallback.x}`);
+  assert.ok(fallback.y >= 0, `y should be on canvas, got ${fallback.y}`);
+  assert.ok(fallback.x + fallback.width <= template.canvas.width);
+  assert.ok(fallback.y + fallback.height <= template.canvas.height);
+});
+
+test("hasLandscapePlacement reflects whether landscapeSizing is set", () => {
+  assert.equal(hasLandscapePlacement(FLAT), false);
+  const template = {
+    ...FLAT,
+    landscapeSizing: { base: { x: 100, y: 300, width: 990, height: 700 } },
+  };
+  assert.equal(hasLandscapePlacement(template), true);
+});
+
+test("a landscape placement is used only when isLandscape is true and isSplit is false", () => {
+  const wide = { x: 100, y: 300, width: 990, height: 700 };
+  const template = { ...FLAT, landscapeSizing: { base: wide } };
+
+  assert.deepEqual(rectForSize(template, "A3", false, true), wide);
+  // Neither the portrait single nor an unrelated split render is affected.
+  assert.deepEqual(rectForSize(template, "A3", false, false), FLAT.rect);
+});
+
+test("isSplit wins over isLandscape when both are somehow passed", () => {
+  const splitBox = { x: 200, y: 400, width: 1600, height: 700 };
+  const landscapeBox = { x: 100, y: 300, width: 990, height: 700 };
+  const template = {
+    ...FLAT,
+    splitSizing: { base: splitBox },
+    landscapeSizing: { base: landscapeBox },
+  };
+
+  assert.deepEqual(rectForSize(template, "A3", true, true), splitBox);
+});
+
+test("landscape placement derives other sizes from the shared reference size", () => {
+  const wide = { x: 100, y: 300, width: 990, height: 700 };
+  const template = {
+    ...FLAT,
+    sizing: { referenceSize: "A3" as const, base: FLAT.rect },
+    landscapeSizing: { base: wide },
+  };
+
+  const a5 = rectForSize(template, "A5", false, true);
+  assert.ok(Math.abs(a5.width - wide.width * 0.5) < 6);
+  assert.ok(a5.width < wide.width, "A5 landscape box must be smaller than the A3 base");
+});
+
+test("a landscape override wins over the derived landscape placement", () => {
+  const wide = { x: 100, y: 300, width: 990, height: 700 };
+  const custom = { x: 10, y: 20, width: 30, height: 40 };
+  const template = {
+    ...FLAT,
+    landscapeSizing: { base: wide, overrides: { A5: custom } },
+  };
+
+  assert.deepEqual(rectForSize(template, "A5", false, true), custom);
+  assert.notDeepEqual(rectForSize(template, "A4", false, true), custom);
+});
+
+test("hasSplitVerticalPlacement reflects whether splitVerticalSizing is set", () => {
+  assert.equal(hasSplitVerticalPlacement(FLAT), false);
+  const template = {
+    ...FLAT,
+    splitVerticalSizing: { base: { x: 100, y: 100, width: 400, height: 1200 } },
+  };
+  assert.equal(hasSplitVerticalPlacement(template), true);
+});
+
+test("splitSizing and splitVerticalSizing are independent — setting one leaves the other alone", () => {
+  // The bug this whole field exists to fix: the two used to be ONE box that
+  // a toggle flipped in place, so repositioning it for a vertical preview
+  // overwrote whatever had been authored for the horizontal one.
+  const horizontal = { x: 200, y: 400, width: 1600, height: 700 };
+  const vertical = { x: 300, y: 50, width: 700, height: 1900 };
+  const template = {
+    ...FLAT,
+    splitSizing: { base: horizontal },
+    splitVerticalSizing: { base: vertical },
+  };
+
+  assert.deepEqual(rectForSize(template, "A3", true, false, false), horizontal);
+  assert.deepEqual(rectForSize(template, "A3", true, false, true), vertical);
+
+  // Editing one field, as the template editor's setRect does, must not be
+  // able to touch the other — expressed here as: the object identity of the
+  // untouched field survives an update to its sibling.
+  const edited = {
+    ...template,
+    splitVerticalSizing: { base: { ...vertical, x: 999 } },
+  };
+  assert.deepEqual(rectForSize(edited, "A3", true, false, false), horizontal);
+});
+
+test("without splitVerticalSizing, a vertical split falls back to the horizontal box turned", () => {
+  const horizontal = { x: 200, y: 400, width: 1600, height: 700 };
+  const template = { ...FLAT, splitSizing: { base: horizontal } };
+
+  const fallback = rectForSize(template, "A3", true, false, true);
+  const turned = flipRect(horizontal, template.canvas);
+  assert.deepEqual(fallback, turned);
+});
+
+test("with neither split field set, a vertical split falls back through the single-sheet box, turned", () => {
+  // splitRectFor itself falls back to the portrait placement when splitSizing
+  // is absent; the vertical fallback turns WHATEVER that resolves to, so the
+  // two fallbacks compose rather than needing their own special case.
+  const fallback = rectForSize(FLAT, "A3", true, false, true);
+  const turned = flipRect(FLAT.rect, FLAT.canvas);
+  assert.deepEqual(fallback, turned);
+});
+
+test("a splitVerticalSizing override wins over the derived vertical placement", () => {
+  const vertical = { x: 300, y: 50, width: 700, height: 1900 };
+  const custom = { x: 10, y: 20, width: 30, height: 40 };
+  const template = {
+    ...FLAT,
+    splitVerticalSizing: { base: vertical, overrides: { A5: custom } },
+  };
+
+  assert.deepEqual(rectForSize(template, "A5", true, false, true), custom);
+  assert.notDeepEqual(rectForSize(template, "A4", true, false, true), custom);
+});
+
+test("splitVerticalSizing derives other sizes from the shared reference size", () => {
+  const vertical = { x: 300, y: 50, width: 700, height: 1900 };
+  const template = {
+    ...FLAT,
+    sizing: { referenceSize: "A3" as const, base: FLAT.rect },
+    splitVerticalSizing: { base: vertical },
+  };
+
+  const a5 = rectForSize(template, "A5", true, false, true);
+  assert.ok(Math.abs(a5.width - vertical.width * 0.5) < 6);
+  assert.ok(a5.width < vertical.width, "A5's vertical split box must be smaller than the A3 base");
+});
+
+test("a perspective vertical split quad is used only when authored, never auto-turned", () => {
+  // Unlike the flat case, there is no automatic turn for an angled quad —
+  // swapping width and height is meaningless once corners are no longer
+  // axis-aligned. Absent splitVerticalSizing, it falls back to the
+  // horizontal split quad UNCHANGED, the same way a perspective landscape
+  // single falls back to the untouched portrait corners.
+  const corners: [
+    { x: number; y: number },
+    { x: number; y: number },
+    { x: number; y: number },
+    { x: number; y: number },
+  ] = [
+    { x: 0, y: 0 },
+    { x: 2000, y: 0 },
+    { x: 2000, y: 1500 },
+    { x: 0, y: 1500 },
+  ];
+  const PERSPECTIVE: Extract<MockupTemplate, { kind: "perspective" }> = {
+    id: "wall",
+    name: "Wall",
+    kind: "perspective",
+    background: "background.jpg",
+    canvas: { width: 2000, height: 1500 },
+    corners,
+  };
+  const horizontalQuad: typeof corners = [
+    { x: 100, y: 100 },
+    { x: 1900, y: 100 },
+    { x: 1900, y: 900 },
+    { x: 100, y: 900 },
+  ];
+  const withSplit = { ...PERSPECTIVE, splitSizing: { base: horizontalQuad } };
+
+  // No splitVerticalSizing authored: falls back to the horizontal quad as-is.
+  assert.deepEqual(quadForSize(withSplit, "A3", true, false, true), horizontalQuad);
+
+  const verticalQuad: typeof corners = [
+    { x: 700, y: 50 },
+    { x: 1300, y: 50 },
+    { x: 1300, y: 1450 },
+    { x: 700, y: 1450 },
+  ];
+  const withBoth = { ...withSplit, splitVerticalSizing: { base: verticalQuad } };
+  assert.deepEqual(quadForSize(withBoth, "A3", true, false, true), verticalQuad);
+  // The horizontal one is unaffected by the vertical one being set.
+  assert.deepEqual(quadForSize(withBoth, "A3", true, false, false), horizontalQuad);
 });

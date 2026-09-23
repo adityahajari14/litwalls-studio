@@ -1,76 +1,58 @@
-import type { PosterKind } from "@/lib/print/types";
-
 /**
- * The product description, shared verbatim by every poster.
+ * The product description: a short paragraph Gemini writes specific to the
+ * poster, followed by the policy block every product shares.
  *
- * This is a static template rather than generated copy, because that is what
- * the store already does: all 154 live products carry byte-identical
- * description HTML. There is no per-product prose to write, which is why the
- * model is never asked for one.
- *
- * Editing this constant changes the description of every product published
- * from here on. That is the intended workflow, and the reason it is a plain
- * string and not something clever.
- *
- * TWO DELIBERATE CHANGES from the live copy:
- *
- * 1. The size section said "Currently available in 13\" x 19\" … More sizes
- *    coming soon". Studio publishes four sizes, so that text would contradict
- *    the size selector on its own product page. Rewritten to list all four.
- *
- * 2. Dropped the `data-start` / `data-end` attributes littered through the
- *    original. They are artifacts of a paste into Shopify's rich-text editor —
- *    they carry no meaning, one of them decorates an empty <strong>, and they
- *    make the template unreadable. Nothing visible changes.
- *
- * The three cdn.shopify.com infographic images are kept as-is. They are
- * already uploaded to the store's Files and shared across every product.
+ * The paragraph is generated per poster (see `gemini/metadata.ts`, which asks
+ * for it in the same call that identifies the subject) rather than filled
+ * into a template here — that's what keeps five hundred products from
+ * reading as one paragraph with a name swapped in. This file only owns the
+ * policy block below it: border, mounting and colour facts are store policy,
+ * not poster copy, so it's edited from Settings rather than written fresh
+ * per product.
  */
 
-const INTRO = `<h3 style="text-align: left;">Discover Premium Posters</h3>
-<p style="text-align: left;">Transform your walls with <strong>premium posters</strong>, designed to combine stunning aesthetics with lasting quality.</p>
-<p style="text-align: left;"> </p>
-<h3 style="text-align: left;">Key Features</h3>
-<p> </p>
-<h5 style="text-align: left;"><strong>✔ Premium Print Quality</strong></h5>
-<p style="text-align: left;">Crafted using <strong>high-definition printing</strong> on <strong>300 GSM glossy paper</strong>, ensuring sharp details, rich colors, and a smooth, professional finish. Each poster is made to make your wall stand out.</p>
-<p style="text-align: left;"> </p>`;
+/**
+ * Shared, byte-identical across every product until someone edits it in
+ * Settings. This is only the value a fresh install starts with.
+ */
+export const DEFAULT_DESCRIPTION_TEMPLATE = `<h3>Things to know before you buy</h3>
+<ul>
+<li><strong>Border:</strong> A standard poster ships with a clean white border framing the print.</li>
+<li><strong>Split sets:</strong> A split set's panels are trimmed by hand and sold without a border, so a panel's size can vary slightly from the dimensions listed.</li>
+<li><strong>Mounting:</strong> Posters ship unmounted — nothing sticky on the back. Put them up with double sided tape or glue dots, whichever you have.</li>
+<li><strong>Tape:</strong> If you need some, double sided tape is sold separately in our store.</li>
+<li><strong>Colour:</strong> Screens render colour differently, so the print in hand can read a touch different from the photo on screen.</li>
+</ul>`;
 
-/** The size block for a single-sheet poster. */
-const SIZES_NORMAL = `<h5 style="text-align: left;"><strong>✔ Perfect Size for Every Space</strong></h5>
-<p><img height="400" width="400" alt="" src="https://cdn.shopify.com/s/files/1/0684/9826/0142/files/Product_description_02.webp?v=1756202904"></p>
-<p style="text-align: left;">Available in <strong>A5, A4, A3</strong> and <strong>13” x 19”</strong> — sizes to suit bedrooms, living rooms, offices, and gaming setups.<br><em>Pick the size that fits your wall from the dropdown above.</em></p>
-<p style="text-align: left;"> </p>`;
+/** Escape the handful of characters that would otherwise break the markup. */
+function escapeHtml(value: string): string {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;");
+}
 
 /**
- * The size block for a three-panel set.
- *
- * Says plainly that one purchase is three sheets. A customer who expects one
- * poster and receives three panels has been mis-sold even though they got more
- * paper, so this is the one place the split format must be unambiguous.
+ * Used only when Gemini didn't write one — offline, unconfigured, or a
+ * failed call. Plain and short on purpose: a human reviews every poster
+ * before it publishes, so this just has to be honest, not persuasive.
  */
-const SIZES_SPLIT = `<h5 style="text-align: left;"><strong>✔ A Three-Panel Set</strong></h5>
-<p><img height="400" width="400" alt="" src="https://cdn.shopify.com/s/files/1/0684/9826/0142/files/Product_description_02.webp?v=1756202904"></p>
-<p style="text-align: left;">This design is printed as a <strong>set of three panels</strong> that sit side by side to form one image. <strong>Every order includes all three panels.</strong></p>
-<p style="text-align: left;">Choose <strong>A4, A3</strong> or <strong>13” x 19”</strong> above — the size you pick is the size of <em>each</em> panel, so the finished piece is three panels wide.</p>
-<p style="text-align: left;"> </p>`;
-
-const OUTRO = `<h5 style="text-align: left;"><strong>✔ Elegant White Border</strong></h5>
-<p><img height="400" width="400" alt="" src="https://cdn.shopify.com/s/files/1/0684/9826/0142/files/Product_description_03.webp?v=1756202906"></p>
-<p style="text-align: left;">Each poster includes a <strong>subtle 0.5mm white border</strong> for a premium, gallery-like look. This border enhances the visual appeal, provides a natural framing effect, and makes your poster pop without the need for an actual frame.</p>
-<p style="text-align: left;"> </p>
-<h5 style="text-align: left;"><strong>✔ Built to Last</strong></h5>
-<p><img height="400" width="400" alt="" src="https://cdn.shopify.com/s/files/1/0684/9826/0142/files/description_image_01.webp?v=1756202904"></p>
-<p style="text-align: left;">Made with <strong>300 GSM thickness</strong> and <strong>fade-resistant inks</strong>, ensuring durability and long-lasting vibrancy.</p>`;
+function fallbackIntro(subject: string): string {
+  return `<p>High-definition wall poster of <strong>${escapeHtml(subject)}</strong>, printed on thick matte paper for a clean, ready-to-frame finish.</p>`;
+}
 
 /**
- * The full description HTML for a poster of the given kind.
- *
- * Two variants, assembled from three constants. No templating engine and no
- * interpolation — a template literal is the whole implementation, and adding
- * anything more would be building a CMS for a two-branch decision.
+ * The full description HTML: the poster-specific paragraph, then the policy
+ * block. `description` is what Gemini wrote for this poster (or a human's
+ * edit of it) — empty falls back to a plain line built from `subject`.
  */
-export function descriptionFor(kind: PosterKind): string {
-  const sizes = kind === "split3" ? SIZES_SPLIT : SIZES_NORMAL;
-  return [INTRO, sizes, OUTRO].join("\n");
+export function descriptionFor(
+  subject: string,
+  description: string,
+  template: string,
+): string {
+  const intro = description.trim()
+    ? `<p>${escapeHtml(description.trim())}</p>`
+    : fallbackIntro(subject);
+  return [intro, template].join("\n");
 }

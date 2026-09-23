@@ -99,7 +99,9 @@ export default async function Home({
                       <h3 className="truncate font-medium text-ink-900">
                         {batch.name}
                       </h3>
-                      <Badge>{batch.category.label}</Badge>
+                      <Badge tone={batch.category ? "neutral" : "accent"}>
+                        {batch.category?.label ?? "auto"}
+                      </Badge>
                     </div>
 
                     <p className="tnum mt-1 font-mono text-[11px] uppercase tracking-[0.1em] text-ink-400">

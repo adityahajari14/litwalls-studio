@@ -21,6 +21,8 @@ export function SettingsForm({
   saved,
   border,
   splitGap,
+  descriptionTemplate,
+  defaultDescriptionTemplate,
 }: {
   prices: PartialPriceTable;
   compareAt: PartialPriceTable;
@@ -35,10 +37,16 @@ export function SettingsForm({
   /** Dashboard default for the gap between split-3 panels — a percentage of
    *  panel width. A template's own `panelGap` overrides this. */
   splitGap: number;
+  /** The saved product description template — HTML with `{{subject}}` and
+   *  `{{format}}` tokens, filled in per poster at publish time. */
+  descriptionTemplate: string;
+  /** What "Reset to default" restores. */
+  defaultDescriptionTemplate: string;
 }) {
   const [borderOn, setBorderOn] = useState(border.enabled);
   const [borderMm, setBorderMm] = useState(border.mm);
   const [gap, setGap] = useState(splitGap);
+  const [template, setTemplate] = useState(descriptionTemplate);
 
   const [state, formAction, pending] = useActionState<SaveState, FormData>(
     saveSettings,
@@ -159,6 +167,36 @@ export function SettingsForm({
             without looking like the panels have drifted apart.
           </p>
         </div>
+      </div>
+
+      <div className="mt-8 border-t border-paper-300 pt-6">
+        <div className="flex items-baseline justify-between gap-3">
+          <h3 className="text-sm font-medium text-ink-700">
+            Description policy block
+          </h3>
+          <button
+            type="button"
+            onClick={() => setTemplate(defaultDescriptionTemplate)}
+            className="text-xs text-ink-400 underline decoration-dotted hover:text-ink-600"
+          >
+            Reset to default
+          </button>
+        </div>
+        <p className="mt-1 mb-3 text-xs text-ink-400">
+          HTML, appended after every product&rsquo;s AI-written opening
+          paragraph — border, mounting and colour facts that are the same on
+          every poster, so they live here instead of being written per
+          product.
+        </p>
+
+        <textarea
+          name="descriptionTemplate"
+          value={template}
+          onChange={(e) => setTemplate(e.target.value)}
+          rows={14}
+          spellCheck={false}
+          className="w-full rounded-md border border-paper-300 bg-paper-50 p-3 font-mono text-xs text-ink-700 focus:border-accent-500 focus:outline-none"
+        />
       </div>
 
       <div className="mt-6 flex items-center gap-3">

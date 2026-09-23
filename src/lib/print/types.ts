@@ -157,8 +157,11 @@ export const COVERAGE_WARN = 0.5;
  * so a stored string would have to be re-parsed and rewritten. Keeping the
  * parts separate makes that a field update instead of string surgery.
  *
- * There is no description here. Every product shares one static template — see
- * `print/description.ts`.
+ * `description` IS generated here, unlike the rest of the title — it is
+ * prose, not a title part, and Gemini writes a fresh paragraph per poster
+ * rather than filling in a template. `print/description.ts` only appends
+ * the policy block (border, adhesive, colour) that's shared by every
+ * product; that part stays a Settings-editable constant, not per-poster.
  */
 export type AiMetadata = {
   /** Who or what this is: "Spider Man", "The Weeknd". */
@@ -174,15 +177,34 @@ export type AiMetadata = {
   tags: string[];
   altText: string;
   /**
-   * The collection the model thinks this belongs in, by handle.
+   * A short, poster-specific opening for the product description — what it
+   * depicts, in the model's own words each time rather than a filled-in
+   * template. Empty when Gemini was unavailable; `descriptionFor` falls back
+   * to a plain line built from `subject` in that case.
+   */
+  description: string;
+  /**
+   * The collection the model thinks this belongs in FIRST, by handle — the
+   * main one, whose name goes in the title.
    *
-   * A batch picks one collection, but batches are often mixed — a Marvel drop
-   * containing a Star Wars poster. When this disagrees with the batch, the
-   * review screen says so. It is a suggestion, never applied automatically:
-   * moving a product between collections changes its title suffix, and doing
-   * that silently would be worse than the occasional misfile.
+   * A fixed batch picks one collection, but batches are often mixed — a Marvel
+   * drop containing a Star Wars poster. When this disagrees with the batch,
+   * the review screen says so. On a FIXED batch it is a suggestion, never
+   * applied automatically: moving a product between collections changes its
+   * title suffix, and doing that silently would be worse than the occasional
+   * misfile. On an AUTO batch it is applied — that is what auto means.
    */
   suggestedCategoryId?: string | null;
+  /**
+   * Every collection the model thinks this belongs in, by handle, MAIN FIRST.
+   *
+   * A poster is rarely in exactly one: a Spider-Man still is Marvel and
+   * Movies & TV and Superheroes at once, and a shopper browsing any of the
+   * three should find it. `suggestedCategoryId` is this list's first entry,
+   * kept as its own field because jobs analyzed before this existed have only
+   * that one.
+   */
+  suggestedCategoryIds?: string[];
   /**
    * Distinguishes a human's words from a model's guess, so the review UI can
    * highlight what still needs a look.
@@ -296,6 +318,17 @@ export type PosterJob = {
   assets: RenderedAsset[];
   mockups: RenderedMockup[];
   selectedTemplateIds: string[];
+  /**
+   * The collections this poster publishes into, MAIN FIRST — a snapshot, for
+   * the same reason `Batch.category` is one.
+   *
+   * Null means "whatever the batch says", which is the whole story for a
+   * batch with a fixed collection. An auto batch fills this in at analyze
+   * time from the model's ranked suggestion, and a human can change it on the
+   * review screen. `categories[0]` is the main one: its suffix goes in the
+   * title, its handle in the SKU, its label on the Drive folder.
+   */
+  categories?: Category[] | null;
   /** The gallery, in order. `images[0]` becomes the product thumbnail. */
   images: ProductImageRef[];
   drive: DriveRefs | null;
@@ -313,12 +346,24 @@ export type Batch = {
    * Carrying the label, suffix and tag means a batch published months later
    * still uses the naming that was correct when it was created, and that
    * nothing needs a live Shopify call to render a title.
+   *
+   * NULL means the batch is on AUTO: every poster gets its own collections,
+   * chosen per poster at analyze time and stored on the job. Null is the
+   * whole representation of auto — there is no second flag that could
+   * disagree with it, and a batch created before auto existed reads as fixed
+   * because its category is already there.
    */
-  category: Category;
+  category: Category | null;
   /** Default kind for jobs ingested into this batch. */
   kind: PosterKind;
   /** Library images attached to every job in the batch by default. */
   defaultLibraryIds: string[];
+  /**
+   * Mockup templates every job in the batch renders with by default — copied
+   * onto each job's `selectedTemplateIds` at creation. Empty means the mockup
+   * stage falls back to its automatic pick.
+   */
+  defaultTemplateIds: string[];
   /**
    * Batch-level prices, set at upload time. Override the dashboard defaults
    * and are in turn overridden per poster. Sizes left blank fall through, so
@@ -386,8 +431,35 @@ export type SizePlacement<T> = {
  * which is almost always too small: a triptych fitted into a box drawn for
  * one portrait sheet is bound by height, leaving most of the box's width
  * unused. A template meant to show split posters should set this.
+ *
+ * This is the HORIZONTAL box — see `splitVerticalSizing` below, on
+ * `MockupTemplate`, for the independent one used to show the same assembled
+ * set turned. The physical object described here never changes shape between
+ * the two; only how it is drawn on a particular wall photo does.
  */
 export type SplitPlacement<T> = {
+  base: T;
+  overrides?: Partial<Record<SizeId, T>>;
+};
+
+/**
+ * Placement for a SINGLE poster whose source is landscape rather than
+ * portrait — the same object as the normal `rect`/`sizing` (one sheet, not an
+ * assembled set), just shaped the other way. A wall photo's landscape frame
+ * is rarely the portrait frame rotated in place; it is usually a different
+ * area entirely, so this is authored and positioned independently rather than
+ * derived by flipping `rect`.
+ *
+ * Same shape as `SplitPlacement` — authored against the same reference size,
+ * no `perSize` of its own — but kept as a distinct type rather than reused
+ * under that name, since the two are picked by unrelated conditions (source
+ * orientation vs. poster kind) and conflating the names would make a caller's
+ * intent unclear at the call site.
+ *
+ * Absent means a landscape single falls back to `rect`/`sizing`, shrunk to
+ * fit inside the portrait box — correct but wastes wall space on either side.
+ */
+export type LandscapePlacement<T> = {
   base: T;
   overrides?: Partial<Record<SizeId, T>>;
 };
@@ -400,6 +472,22 @@ type TemplateBase = {
   canvas: { width: number; height: number };
   shadow?: number;
   suitsAspect?: number[];
+  /**
+   * What this template is MEANT to show, declared by its author.
+   *
+   * `suitsAspect` is a hint the auto-picker scores against; this is a hard
+   * filter. A template flagged `formats: ["split3"]` is never auto-selected
+   * for a single-sheet poster, and one flagged `orientations: ["portrait"]`
+   * is skipped for a landscape source. An absent field, or an empty array on
+   * a facet, means "all of them" — the same behaviour templates had before
+   * this existed. A template a human explicitly picks (per job, or as a batch
+   * default) is still rendered regardless: this only governs the automatic
+   * choice.
+   */
+  suits?: {
+    formats?: PosterKind[];
+    orientations?: ("portrait" | "landscape")[];
+  };
   /**
    * Gap between the three panels of a split poster, as a PERCENTAGE OF PANEL
    * WIDTH. Split jobs only. Default 1.2.
@@ -419,6 +507,17 @@ export type MockupTemplate =
       /** Per-size placement. Absent means every size uses `rect`. */
       sizing?: SizePlacement<PlacementRect>;
       splitSizing?: SplitPlacement<PlacementRect>;
+      /**
+       * A SECOND, independent split-3 box for showing the same assembled
+       * panel set turned on this wall photo — a hallway or stairwell where
+       * the wide triptych reads better mounted tall. Not derived from
+       * `splitSizing` by flipping it: the two are authored, edited, and
+       * saved separately, so repositioning one never touches the other.
+       * Absent means it falls back to `splitSizing` (itself possibly a
+       * fallback) turned on its side — see `rectForSize`.
+       */
+      splitVerticalSizing?: SplitPlacement<PlacementRect>;
+      landscapeSizing?: LandscapePlacement<PlacementRect>;
     })
   | (TemplateBase & {
       kind: "perspective";
@@ -431,6 +530,10 @@ export type MockupTemplate =
       corners: [Pt, Pt, Pt, Pt];
       sizing?: SizePlacement<[Pt, Pt, Pt, Pt]>;
       splitSizing?: SplitPlacement<[Pt, Pt, Pt, Pt]>;
+      /** See the flat variant's `splitVerticalSizing`. No automatic turn
+       *  exists for an angled quad, so this is used only when authored. */
+      splitVerticalSizing?: SplitPlacement<[Pt, Pt, Pt, Pt]>;
+      landscapeSizing?: LandscapePlacement<[Pt, Pt, Pt, Pt]>;
     });
 
 /** An entry in the reusable product-image library (size guide, quality info…). */

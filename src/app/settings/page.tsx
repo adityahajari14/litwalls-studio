@@ -1,5 +1,6 @@
 import { SettingsForm } from "@/app/settings/settings-form";
 import { PageHeader, Section } from "@/components/ui";
+import { DEFAULT_DESCRIPTION_TEMPLATE } from "@/lib/print/description";
 import {
   FALLBACK_COMPARE_AT,
   FALLBACK_PRICES,
@@ -35,6 +36,8 @@ export default async function SettingsPage() {
           saved={settings.updatedAt > 0}
           border={settings.mockupBorder}
           splitGap={settings.splitGap}
+          descriptionTemplate={settings.descriptionTemplate}
+          defaultDescriptionTemplate={DEFAULT_DESCRIPTION_TEMPLATE}
         />
       </Section>
     </main>

@@ -6,7 +6,23 @@ import {
   writeBatch,
 } from "@/lib/pipeline/store";
 import { normalizePriceTable } from "@/lib/print/pricing";
-import type { NormRect, PosterJob, SizeId } from "@/lib/print/types";
+import { resolveCategories } from "@/lib/print/categories";
+import {
+  fetchCategories,
+  fetchCategoriesFallback,
+} from "@/lib/shopify/collections";
+import type { Category, NormRect, PosterJob, SizeId } from "@/lib/print/types";
+
+/** The collections a poster can be filed into. Falls back to the Storefront
+ *  list, as the batch form does, so an Admin token without read_collections
+ *  degrades rather than making the field unsettable. */
+async function liveCategories(): Promise<Category[]> {
+  try {
+    return await fetchCategories();
+  } catch {
+    return await fetchCategoriesFallback().catch(() => []);
+  }
+}
 
 export async function GET(
   _request: Request,
@@ -82,6 +98,13 @@ export async function PATCH(
     return Response.json({ error: "Expected JSON." }, { status: 400 });
   }
 
+  // Fetched before the update rather than inside it: `updateJob` holds the
+  // job file while it runs, and a Shopify round trip is not something to do
+  // with a write in hand.
+  const available = Array.isArray(body.categoryIds)
+    ? await liveCategories()
+    : [];
+
   const job = await updateJob(batchId, jobId, (current) => {
     const next: PosterJob = { ...current };
 
@@ -109,6 +132,10 @@ export async function PATCH(
           typeof m.altText === "string"
             ? m.altText.trim().slice(0, 125)
             : (current.metadata?.altText ?? ""),
+        description:
+          typeof m.description === "string"
+            ? m.description.trim().slice(0, 600)
+            : (current.metadata?.description ?? ""),
         source: "manual",
       };
     }
@@ -147,6 +174,18 @@ export async function PATCH(
     if (body.compareAtOverrides && typeof body.compareAtOverrides === "object") {
       next.compareAtOverrides = normalizePriceTable(
         body.compareAtOverrides as Record<string, string>,
+      );
+    }
+
+    if (Array.isArray(body.categoryIds)) {
+      // Resolved against LIVE Shopify rather than trusted from the client,
+      // for the same reason batch creation is: a stale browser tab must not
+      // be able to file a poster into a collection that has since been
+      // renamed or deleted. The ORDER given is kept — the first is the main
+      // collection, and re-sorting here would rename the product.
+      next.categories = resolveCategories(
+        body.categoryIds.filter((id): id is string => typeof id === "string"),
+        available,
       );
     }
 

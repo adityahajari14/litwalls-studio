@@ -22,11 +22,14 @@ import type {
 
 export function createBatch(input: {
   name: string;
-  category: Category;
+  /** Null puts the batch on AUTO: each poster is filed into its own
+   *  collections at analyze time. See `Batch.category`. */
+  category: Category | null;
   kind: PosterKind;
   prices?: Partial<Record<SizeId, string>>;
   compareAt?: Partial<Record<SizeId, string>>;
   defaultLibraryIds?: string[];
+  defaultTemplateIds?: string[];
 }): Batch {
   const now = Date.now();
   return {
@@ -35,6 +38,7 @@ export function createBatch(input: {
     category: input.category,
     kind: input.kind,
     defaultLibraryIds: input.defaultLibraryIds ?? [],
+    defaultTemplateIds: input.defaultTemplateIds ?? [],
     // Normalised at the boundary so nothing downstream has to wonder whether
     // a price is "499", "₹499 ", or garbage.
     prices: normalizePriceTable(input.prices ?? {}),
@@ -69,10 +73,18 @@ export function createJob(input: {
     compareAtOverrides: {},
     assets: [],
     mockups: [],
-    selectedTemplateIds: [],
+    // Seeded from the batch so a batch-wide mockup choice needs setting once,
+    // not per poster. A human can still change it on the review screen.
+    // `?? []` for batches created before this field existed.
+    selectedTemplateIds: [...(input.batch.defaultTemplateIds ?? [])],
+    // Null until the batch's collection is copied down or, on an auto batch,
+    // the analyze stage files this poster. Explicit rather than absent so a
+    // job written today and read by `categoriesFor` cannot look like an
+    // older job that simply predates the field.
+    categories: null,
     // Batch defaults seed the gallery so a size guide is set once per batch
     // rather than once per poster.
-    images: input.batch.defaultLibraryIds.map((libraryId) => ({
+    images: (input.batch.defaultLibraryIds ?? []).map((libraryId) => ({
       kind: "library" as const,
       libraryId,
     })),

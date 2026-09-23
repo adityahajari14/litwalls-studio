@@ -18,6 +18,22 @@ import type { Category } from "@/lib/print/types";
  * report on.
  */
 
+/**
+ * Collections Studio must never offer or publish into, by handle.
+ *
+ * `custom-prints` is the storefront's made-to-order upload flow, not a
+ * catalogue collection — a poster filed there is titled after a collection it
+ * does not belong in and appears on a page customers reach only by ordering a
+ * custom print. Filtered at the source so it is gone from the batch form, the
+ * review screen, and the list handed to Gemini all at once.
+ */
+export const HIDDEN_COLLECTION_HANDLES = new Set<string>(["custom-prints"]);
+
+/** Drop the collections Studio is not allowed to use. Pure — unit-tested. */
+export function withoutHiddenCollections(list: Category[]): Category[] {
+  return list.filter((category) => !HIDDEN_COLLECTION_HANDLES.has(category.id));
+}
+
 const COLLECTIONS = /* GraphQL */ `
   query Collections {
     collections(first: 100) {
@@ -81,16 +97,16 @@ function tagFor(node: CollectionsResponse["collections"]["nodes"][number]): stri
 export async function fetchCategories(): Promise<Category[]> {
   const data = await admin<CollectionsResponse>(COLLECTIONS);
 
-  return data.collections.nodes
-    .map((node) => ({
+  return withoutHiddenCollections(
+    data.collections.nodes.map((node) => ({
       id: node.handle,
       label: node.title,
       suffix: suffixFor(node.title),
       tag: tagFor(node),
       collectionId: node.id,
       smart: node.ruleSet !== null,
-    }))
-    .sort((a, b) => a.label.localeCompare(b.label));
+    })),
+  ).sort((a, b) => a.label.localeCompare(b.label));
 }
 
 /** Storefront fallback — works even without a write-scoped Admin token. */
@@ -111,8 +127,8 @@ export async function fetchCategoriesFallback(): Promise<Category[]> {
     collections: { nodes: { id: string; handle: string; title: string }[] };
   }>(STOREFRONT_COLLECTIONS);
 
-  return data.collections.nodes
-    .map((node) => ({
+  return withoutHiddenCollections(
+    data.collections.nodes.map((node) => ({
       id: node.handle,
       label: node.title,
       suffix: suffixFor(node.title),
@@ -122,6 +138,6 @@ export async function fetchCategoriesFallback(): Promise<Category[]> {
       tag: node.title.trim().replace(/\s*posters?$/i, ""),
       collectionId: node.id,
       smart: true,
-    }))
-    .sort((a, b) => a.label.localeCompare(b.label));
+    })),
+  ).sort((a, b) => a.label.localeCompare(b.label));
 }

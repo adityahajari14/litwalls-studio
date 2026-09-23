@@ -120,7 +120,7 @@ test("three assembled panels match the split crop aspect", () => {
   for (const sizeId of SIZE_IDS) {
     const panel = targetPanelPixels(sizeId);
     const assembled = (panel.width * 3) / panel.height;
-    const wanted = cropAspectFor(sizeId, "split3");
+    const wanted = cropAspectFor(sizeId, "split3", "portrait");
     assert.ok(
       Math.abs(assembled - wanted) < 0.01,
       `${sizeId}: assembled ${assembled.toFixed(3)} vs crop ${wanted.toFixed(3)}`,
@@ -129,10 +129,44 @@ test("three assembled panels match the split crop aspect", () => {
 });
 
 test("split crop aspect is three portrait sheets wide", () => {
-  assert.equal(cropAspectFor("A3", "split3"), aspectFor("A3") * 3);
-  assert.equal(cropAspectFor("A3", "normal"), aspectFor("A3"));
+  assert.equal(cropAspectFor("A3", "split3", "portrait"), aspectFor("A3") * 3);
+  assert.equal(cropAspectFor("A3", "normal", "portrait"), aspectFor("A3"));
   // A-series: 3 x 0.707 = 2.121, a wide band.
-  assert.ok(Math.abs(cropAspectFor("A3", "split3") - 2.121) < 0.01);
+  assert.ok(Math.abs(cropAspectFor("A3", "split3", "portrait") - 2.121) < 0.01);
+});
+
+test("a split poster's crop ignores the source's orientation", () => {
+  // Panels are portrait sheets by construction, so a landscape source still
+  // has to be cropped to the same wide band. If this ever tracked the source
+  // the three panels would stop tiling the crop.
+  for (const sizeId of SIZE_IDS) {
+    assert.equal(
+      cropAspectFor(sizeId, "split3", "landscape"),
+      cropAspectFor(sizeId, "split3", "portrait"),
+    );
+  }
+});
+
+/**
+ * The regression this whole orientation parameter exists for.
+ *
+ * `renderOne` extracts a region of `cropAspectFor` and resizes it into
+ * `targetPixels` with `fit: "fill"` — no letterboxing, no second crop. If the
+ * two disagree the artwork is stretched, silently, with no error anywhere. A
+ * landscape poster used to be cropped 1:1.414 and filled into 1.414:1, so
+ * every wide poster went out squashed to half its width.
+ */
+test("crop aspect matches the pixels it will be filled into", () => {
+  for (const sizeId of SIZE_IDS) {
+    for (const orientation of ["portrait", "landscape"] as const) {
+      const px = targetPixels(sizeId, orientation);
+      const wanted = cropAspectFor(sizeId, "normal", orientation);
+      assert.ok(
+        Math.abs(px.width / px.height - wanted) < 0.001,
+        `${sizeId} ${orientation}: pixels ${(px.width / px.height).toFixed(3)} vs crop ${wanted.toFixed(3)}`,
+      );
+    }
+  }
 });
 
 

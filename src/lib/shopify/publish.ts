@@ -17,9 +17,13 @@ import {
   skuFor,
 } from "@/lib/print/identity";
 import { recordPublished } from "@/lib/pipeline/registry";
-import { ensureCategoryTag, formatTitle } from "@/lib/print/title";
+import { categoriesFor } from "@/lib/print/categories";
+import { productOrientation } from "@/lib/print/orientation";
+import { requiredTagsFor, withRequiredTags } from "@/lib/print/tags";
+import { formatTitle } from "@/lib/print/title";
 import type {
   Batch,
+  Category,
   PosterJob,
   ProductImageRef,
   ShopifyRefs,
@@ -84,6 +88,25 @@ const PUBLICATIONS = /* GraphQL */ `
       nodes {
         id
         name
+      }
+    }
+  }
+`;
+
+/**
+ * Joining a MANUAL collection.
+ *
+ * Tags cannot do this: a manual collection has no rule to satisfy, so
+ * membership is an explicit add. Kept out of the `productSet` input on
+ * purpose — that mutation is declarative, and handing it a collection list
+ * would make it authoritative over membership the store manages by rule.
+ */
+const COLLECTION_ADD = /* GraphQL */ `
+  mutation AddToCollection($id: ID!, $productIds: [ID!]!) {
+    collectionAddProducts(id: $id, productIds: $productIds) {
+      userErrors {
+        field
+        message
       }
     }
   }
@@ -212,6 +235,35 @@ async function publicationIds(): Promise<string[]> {
   }
 }
 
+/**
+ * Add the product to every collection a tag cannot reach.
+ *
+ * Best-effort, like channel publication: the product exists either way, and
+ * failing a whole publish over a membership fixable with one click in the
+ * admin would be the wrong trade. Warns per collection so the reason is in
+ * the log rather than inferred from an empty collection page later.
+ */
+async function joinManualCollections(
+  productId: string,
+  categories: readonly Category[],
+): Promise<void> {
+  for (const category of categories) {
+    if (category.smart) continue;
+    try {
+      await admin(COLLECTION_ADD, {
+        id: category.collectionId,
+        productIds: [productId],
+      });
+    } catch (cause) {
+      console.warn(
+        `publish: could not add the product to "${category.label}": ${
+          cause instanceof Error ? cause.message : String(cause)
+        }`,
+      );
+    }
+  }
+}
+
 export async function publishJob(options: {
   job: PosterJob;
   batch: Batch;
@@ -221,6 +273,7 @@ export async function publishJob(options: {
    *  single sheet at the same nominal size, priced separately. */
   settingsSplitPrices: Partial<Record<SizeId, string>>;
   settingsSplitCompareAt: Partial<Record<SizeId, string>>;
+  descriptionTemplate: string;
   numberer: Numberer;
   /** DRAFT keeps it out of the storefront until variants are supported. */
   status?: "ACTIVE" | "DRAFT";
@@ -235,13 +288,27 @@ export async function publishJob(options: {
   if (!subject) return err("Set a subject before publishing.");
   if (job.assets.length === 0) return err("This poster has not been rendered.");
 
+  // Main first. On an auto batch this is what the model chose and a human
+  // approved; otherwise it is the batch's one collection. Empty is only
+  // possible on an auto batch nothing was filed into, and it stops the
+  // publish rather than defaulting: a product with no collection is live,
+  // findable by nobody, and titled after a collection it is not in.
+  const categories = categoriesFor(job, batch);
+  const category = categories[0];
+  if (!category) {
+    return err(
+      "This poster has not been filed into a collection. " +
+        "Pick one on the review screen before publishing.",
+    );
+  }
+
   // Claimed here, moments before the mutation, against a catalogue snapshot
   // taken for this run — not at analyze time, when a number could since have
   // been taken by another publish.
   const sequence = job.metadata?.sequence ?? numberer.claim(subject);
   const title = formatTitle(
     { subject, sequence, subtitle: job.metadata?.subtitle },
-    batch.category,
+    category,
   );
 
   const prices = resolvePriceTable(
@@ -302,7 +369,7 @@ export async function publishJob(options: {
         // straight off the order line, without opening the product.
         inventoryItem: {
           sku: skuFor({
-            category: batch.category,
+            category,
             subject,
             sequence,
             sizeId: size.id,
@@ -362,20 +429,34 @@ export async function publishJob(options: {
         // what keeps a retry from producing a second product.
         ...(job.shopify?.productId ? { id: job.shopify.productId } : {}),
         title,
-        descriptionHtml: descriptionFor(job.kind),
+        descriptionHtml: descriptionFor(
+          subject,
+          job.metadata?.description ?? "",
+          options.descriptionTemplate,
+        ),
         vendor: "Litwalls",
         status: options.status ?? "ACTIVE",
-        // The collection tag is guaranteed here rather than trusted: all four
-        // collections are smart collections keyed on tags, so a missing tag
-        // means a product that is live but appears nowhere.
-        tags: ensureCategoryTag(job.metadata?.tags ?? [], batch.category),
+        // Every structural tag is guaranteed here rather than trusted to the
+        // model or the human: this store's collections are smart collections
+        // keyed on tags, so a missing tag means a product that is live and
+        // appears nowhere. That now covers EVERY collection the poster is
+        // filed into, not just the main one, plus the orientation and format
+        // tags a shopper filters on.
+        tags: withRequiredTags(
+          job.metadata?.tags ?? [],
+          requiredTagsFor({
+            categories,
+            orientation: productOrientation(job),
+            kind: job.kind,
+          }),
+        ),
         // Every hand-made product in the catalogue carries an SEO description
         // and Studio was publishing none — making its products strictly worse
         // in search than the ones done by hand. The title is written rather
         // than defaulted: Shopify would otherwise use "Spider Man #06 | Marvel
         // Posters", where the "#06" is meaningless to a shopper.
         seo: {
-          title: seoTitleFor({ subject, category: batch.category }),
+          title: seoTitleFor({ subject, category }),
           description: seoDescriptionFor(subject, job.kind),
         },
         productOptions: [
@@ -411,6 +492,10 @@ export async function publishJob(options: {
       if (node.alt) mediaIds[node.alt] = node.id;
     }
 
+    // Smart collections are joined by the tags above; a manual one needs an
+    // explicit add, which is why this exists at all.
+    await joinManualCollections(product.id, categories);
+
     // Channel publication is best-effort: the product exists either way, and
     // failing the whole publish over something fixable with one click in the
     // admin would be the wrong trade. A DRAFT product stays invisible
@@ -445,8 +530,8 @@ export async function publishJob(options: {
       handle: product.handle,
       title,
       subject,
-      categoryId: batch.category.id,
-      categoryLabel: batch.category.label,
+      categoryId: category.id,
+      categoryLabel: category.label,
       status: options.status ?? "ACTIVE",
       publishedAt: Date.now(),
       batchId: job.batchId,

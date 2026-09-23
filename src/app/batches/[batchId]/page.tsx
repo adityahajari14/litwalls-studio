@@ -50,7 +50,13 @@ export default async function BatchPage(
         title={batch.name}
         meta={
           <>
-            <Badge>{batch.category.label}</Badge>
+            {/* An auto batch has no one collection to name — each poster
+                carries its own, shown on its review screen. */}
+            {batch.category ? (
+              <Badge>{batch.category.label}</Badge>
+            ) : (
+              <Badge tone="accent">collections per poster</Badge>
+            )}
             <Badge>
               {batch.kind === "split3" ? "Split — 3 panels" : "Single sheet"}
             </Badge>

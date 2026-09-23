@@ -2,7 +2,11 @@ import { createReadStream } from "node:fs";
 import { stat } from "node:fs/promises";
 import { Readable } from "node:stream";
 
-import { libraryPath } from "@/lib/library/load";
+import {
+  deleteLibraryImage,
+  libraryPath,
+  updateLibraryEntry,
+} from "@/lib/library/load";
 
 const CONTENT_TYPES: Record<string, string> = {
   jpg: "image/jpeg",
@@ -48,4 +52,54 @@ export async function GET(
       "Cache-Control": "no-store",
     },
   });
+}
+
+/** Rename, re-role or reposition a shared image (writes `library.json`). */
+export async function PATCH(
+  request: Request,
+  ctx: RouteContext<"/api/library/[imageId]">,
+) {
+  const { imageId } = await ctx.params;
+  const id = decodeURIComponent(imageId);
+
+  let body: { name?: string; role?: string; order?: number };
+  try {
+    body = (await request.json()) as typeof body;
+  } catch {
+    return Response.json({ error: "Expected JSON." }, { status: 400 });
+  }
+
+  try {
+    // Reuses libraryPath's traversal guard.
+    libraryPath(id);
+    await updateLibraryEntry(id, body);
+  } catch (cause) {
+    return Response.json(
+      { error: cause instanceof Error ? cause.message : String(cause) },
+      { status: 400 },
+    );
+  }
+
+  return Response.json({ ok: true });
+}
+
+/** Remove a shared image and its manifest entry. */
+export async function DELETE(
+  _request: Request,
+  ctx: RouteContext<"/api/library/[imageId]">,
+) {
+  const { imageId } = await ctx.params;
+  const id = decodeURIComponent(imageId);
+
+  try {
+    libraryPath(id);
+    await deleteLibraryImage(id);
+  } catch (cause) {
+    return Response.json(
+      { error: cause instanceof Error ? cause.message : String(cause) },
+      { status: 400 },
+    );
+  }
+
+  return Response.json({ ok: true });
 }

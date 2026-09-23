@@ -107,7 +107,21 @@ export function validateTemplate(input: unknown): ValidationResult {
     errors.push(...validateSizing(t.sizing, t.kind));
   }
   if (t.splitSizing !== undefined) {
-    errors.push(...validateSplitSizing(t.splitSizing, t.kind));
+    errors.push(...validateAreaOnlyPlacement(t.splitSizing, "splitSizing", t.kind));
+  }
+  if (t.splitVerticalSizing !== undefined) {
+    errors.push(
+      ...validateAreaOnlyPlacement(
+        t.splitVerticalSizing,
+        "splitVerticalSizing",
+        t.kind,
+      ),
+    );
+  }
+  if (t.landscapeSizing !== undefined) {
+    errors.push(
+      ...validateAreaOnlyPlacement(t.landscapeSizing, "landscapeSizing", t.kind),
+    );
   }
 
   if (t.shadow !== undefined) {
@@ -126,6 +140,10 @@ export function validateTemplate(input: unknown): ValidationResult {
         `"panelGap", if present, must be between 0 and ${MAX_PANEL_GAP} — it is a percentage of panel width, not pixels.`,
       );
     }
+  }
+
+  if (t.suits !== undefined) {
+    errors.push(...validateSuits(t.suits));
   }
 
   if (errors.length > 0) return { ok: false, errors };
@@ -213,20 +231,67 @@ function validateSizing(input: unknown, kind: unknown): string[] {
 }
 
 /**
- * Placement for a split-3 poster's assembled panel set. No `referenceSize`
- * or `perSize` here — it is authored against the same reference size as
- * `sizing`, since there is only one to pick.
+ * Placement for a split-3 poster's assembled panel set, or for a landscape
+ * single poster — both are `{ base, overrides }` with no `referenceSize` or
+ * `perSize` of their own, since each is authored against the same reference
+ * size as `sizing`.
  */
-function validateSplitSizing(input: unknown, kind: unknown): string[] {
+function validateAreaOnlyPlacement(
+  input: unknown,
+  label: string,
+  kind: unknown,
+): string[] {
   const errors: string[] = [];
   if (typeof input !== "object" || input === null) {
-    return ['"splitSizing", if present, must be an object.'];
+    return [`"${label}", if present, must be an object.`];
   }
 
   const sizing = input as Record<string, unknown>;
 
-  checkArea(sizing.base, '"splitSizing.base"', kind, errors);
-  checkOverrides(sizing.overrides, "splitSizing", kind, errors);
+  checkArea(sizing.base, `"${label}.base"`, kind, errors);
+  checkOverrides(sizing.overrides, label, kind, errors);
+
+  return errors;
+}
+
+const TEMPLATE_FORMATS = ["normal", "split3"] as const;
+const TEMPLATE_ORIENTATIONS = ["portrait", "landscape"] as const;
+
+/**
+ * The author's declaration of what a template is for — an optional
+ * `{ formats?, orientations? }` whose arrays hold only the known literals.
+ * Absent or empty means "all", so the only failure worth a message is a value
+ * that is neither.
+ */
+function validateSuits(input: unknown): string[] {
+  if (typeof input !== "object" || input === null) {
+    return ['"suits", if present, must be an object.'];
+  }
+
+  const suits = input as Record<string, unknown>;
+  const errors: string[] = [];
+
+  const checkFacet = (
+    value: unknown,
+    label: string,
+    allowed: readonly string[],
+  ) => {
+    if (value === undefined) return;
+    if (!Array.isArray(value)) {
+      errors.push(`"suits.${label}", if present, must be an array.`);
+      return;
+    }
+    for (const entry of value) {
+      if (!allowed.includes(entry as string)) {
+        errors.push(
+          `"suits.${label}" has an unknown value ${JSON.stringify(entry)} — expected ${allowed.join(" or ")}.`,
+        );
+      }
+    }
+  };
+
+  checkFacet(suits.formats, "formats", TEMPLATE_FORMATS);
+  checkFacet(suits.orientations, "orientations", TEMPLATE_ORIENTATIONS);
 
   return errors;
 }

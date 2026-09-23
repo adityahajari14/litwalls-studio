@@ -71,6 +71,7 @@ export async function POST(
           subtitle: job.metadata?.subtitle ?? null,
           sequence: job.metadata?.sequence ?? null,
           altText: job.metadata?.altText ?? "",
+          description: job.metadata?.description ?? "",
           tags: merged,
           // A bulk tag edit is a human decision, so it must not be treated as
           // an unfinished AI result and re-asked on the next run.

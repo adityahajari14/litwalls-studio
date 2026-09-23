@@ -52,3 +52,14 @@ next-env.d.ts
 # Stranded atomic-write temp files. The retry in writeFileAtomic cleans
 # these up now, but one from before that fix should never be committed.
 *.tmp
+
+# Transient "a background job is still running" markers for a template's
+# upscale + AI placement, and the equivalent for shared images. Cleared when
+# the job finishes; a stale one is ignored after ten minutes.
+mockup-templates/*/.processing
+product-images/.processing.json
+
+# AI upscale model weights. ~67MB and never changes once fetched, so it does
+# not belong in git history — `npm run models:fetch` downloads it straight
+# into this directory. See MODEL_LICENSE.md before using it commercially.
+/models/

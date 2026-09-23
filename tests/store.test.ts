@@ -20,11 +20,21 @@ import {
  */
 const created: string[] = [];
 
-function makeBatch() {
+function makeBatch(
+  extra: Partial<Parameters<typeof createBatch>[0]> = {},
+) {
   const batch = createBatch({
     name: "Test batch",
-    category: "marvel",
+    category: {
+      id: "marvel",
+      label: "Marvel",
+      suffix: "Marvel Posters",
+      tag: "Marvel",
+      collectionId: "gid://shopify/Collection/1",
+      smart: true,
+    },
     kind: "normal",
+    ...extra,
   });
   created.push(batch.id);
   return batch;
@@ -50,7 +60,37 @@ test("a batch round-trips through disk", async () => {
   const back = await readBatch(batch.id);
   assert.ok(back);
   assert.equal(back.name, "Test batch");
-  assert.equal(back.category, "marvel");
+  // The whole snapshot, not just the handle: carrying the label, suffix and
+  // tag is what lets a batch published months later still title its products
+  // the way it was set up to.
+  assert.deepEqual(back.category, batch.category);
+});
+
+test("a batch round-trips its default mockup and image lists", async () => {
+  const batch = makeBatch({
+    defaultTemplateIds: ["mockup-1", "mockup-2"],
+    defaultLibraryIds: ["size-guide.png"],
+  });
+  await writeBatch(batch);
+
+  const back = await readBatch(batch.id);
+  assert.ok(back);
+  assert.deepEqual(back.defaultTemplateIds, ["mockup-1", "mockup-2"]);
+  assert.deepEqual(back.defaultLibraryIds, ["size-guide.png"]);
+});
+
+test("a job inherits the batch's default mockup selection", async () => {
+  const batch = makeBatch({ defaultTemplateIds: ["mockup-1"] });
+  await writeBatch(batch);
+
+  const job = createJob({
+    batch,
+    sourceName: "Spider Man.jpg",
+    sourceRelPath: "original.jpg",
+  });
+  assert.deepEqual(job.selectedTemplateIds, ["mockup-1"]);
+  // No default library images on this batch, so the gallery starts empty.
+  assert.deepEqual(job.images, []);
 });
 
 test("reading a missing batch returns null rather than throwing", async () => {

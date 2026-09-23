@@ -5,6 +5,7 @@ import { readFile, stat } from "node:fs/promises";
 import sharp from "sharp";
 
 import { cropRectFor, toPixelRect } from "@/lib/image/crop-rect";
+import { printOrientation } from "@/lib/print/orientation";
 import { finishPrintFile, PRINT_JPEG } from "@/lib/image/print-output";
 import { ensureDir, jobAsset, jobDir } from "@/lib/pipeline/paths";
 import { MASTER_FILE } from "@/lib/pipeline/stages/upscale";
@@ -52,7 +53,9 @@ export function cropForSize(
 
   return cropRectFor({
     source,
-    targetAspect: cropAspectFor(sizeId, job.kind),
+    // The orientation the FILES are cut in — portrait for a split poster
+    // whichever way round its source is, since a panel is a portrait sheet.
+    targetAspect: cropAspectFor(sizeId, job.kind, printOrientation(job)),
     subject: job.focal?.subject,
     anchor: job.focal?.anchor,
   });
@@ -115,7 +118,11 @@ export async function cropAll(job: PosterJob): Promise<RenderedAsset[]> {
 
   const masterPath = jobAsset(job.batchId, job.id, MASTER_FILE);
   const source = { width: job.probe.width, height: job.probe.height };
-  const orientation = source.width >= source.height ? "landscape" : "portrait";
+  // One shared answer, from one shared function: `cropForSize` computes the
+  // crop's aspect from this same orientation, and `renderOne` fills that crop
+  // into these pixels without letterboxing. The two disagreeing is silent
+  // distortion, not an error, so they are not allowed to be derived twice.
+  const orientation = printOrientation(job);
 
   await ensureDir(`${jobDir(job.batchId, job.id)}/sizes`);
 

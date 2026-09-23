@@ -12,10 +12,13 @@ import { MASTER_FILE } from "@/lib/pipeline/stages/upscale";
 import { readBatch } from "@/lib/pipeline/store";
 import { fetchCatalogue } from "@/lib/shopify/numbering";
 import { fetchCategories } from "@/lib/shopify/collections";
+import { categoriesFor, isAutoBatch, resolveCategories } from "@/lib/print/categories";
+import { printOrientation } from "@/lib/print/orientation";
 import { parseTitle } from "@/lib/print/title";
 import { cropAspectFor, sizesFor } from "@/lib/print/sizes";
 import type {
   AiMetadata,
+  Category,
   FocalPoint,
   NormRect,
   PosterJob,
@@ -77,12 +80,25 @@ export async function analyze(job: PosterJob): Promise<Partial<PosterJob>> {
   const needsMetadata = !job.metadata || job.metadata.source === "fallback";
   const needsFocal = !job.focal || job.focal.source === "fallback";
   const needsCrops = job.aiCrops === undefined;
-  if (!needsMetadata && !needsFocal && !needsCrops) return {};
+  // An auto batch has no collection of its own, so filing this poster is real
+  // work this stage owes — and work that survives a re-run, since a job whose
+  // metadata was already written by an earlier version has a suggestion
+  // stored but nothing resolved from it.
+  const needsCategories =
+    isAutoBatch(batch) && categoriesFor(job, batch).length === 0;
+  if (!needsMetadata && !needsFocal && !needsCrops && !needsCategories) {
+    return {};
+  }
 
   const image = jobAsset(job.batchId, job.id, MASTER_FILE);
   const vocabulary = needsMetadata
     ? await loadVocabulary()
     : { subjects: [], tags: [] };
+  // Fetched once and used twice: to offer the model a list, and to resolve
+  // what it picks back into real collections. Reading them twice would let a
+  // collection renamed mid-batch produce a suggestion that resolves to
+  // nothing.
+  const available = needsMetadata || needsCategories ? await liveCategories() : [];
 
   // Both calls read the same image and neither depends on the other, so they
   // run together rather than doubling the wait.
@@ -91,10 +107,13 @@ export async function analyze(job: PosterJob): Promise<Partial<PosterJob>> {
       ? describePoster({
           image,
           sourceName: job.sourceName,
+          // Null on an auto batch: there is no collection to tell it about,
+          // and inventing one would anchor the very answer we are asking for.
           category: batch.category,
+          kind: job.kind,
           knownSubjects: vocabulary.subjects,
           knownTags: vocabulary.tags,
-          collections: await categoryOptions(),
+          collections: available.map((c) => ({ id: c.id, label: c.label })),
         })
       : Promise.resolve(job.metadata!),
     needsFocal
@@ -104,7 +123,29 @@ export async function analyze(job: PosterJob): Promise<Partial<PosterJob>> {
 
   const aiCrops = needsCrops ? await reframeSizes(job) : job.aiCrops;
 
-  return { metadata, focal, aiCrops };
+  const categories = needsCategories
+    ? filedInto(metadata, available)
+    : job.categories;
+
+  return { metadata, focal, aiCrops, categories };
+}
+
+/**
+ * Turn the model's ranked handles into collections, order intact.
+ *
+ * Empty is a legitimate answer and left as-is rather than backfilled with a
+ * guess: the review screen shows an unfiled poster plainly and the publisher
+ * refuses it, which is far better than quietly filing a poster somewhere
+ * nobody chose.
+ */
+function filedInto(
+  metadata: AiMetadata,
+  available: readonly Category[],
+): Category[] {
+  const handles =
+    metadata.suggestedCategoryIds ??
+    (metadata.suggestedCategoryId ? [metadata.suggestedCategoryId] : []);
+  return resolveCategories(handles, available);
 }
 
 /**
@@ -125,12 +166,13 @@ async function reframeSizes(
   const image = jobAsset(job.batchId, job.id, MASTER_FILE);
   const source = { width: job.probe.width, height: job.probe.height };
   const sourceAspect = source.width / source.height;
+  const orientation = printOrientation(job);
 
   const out: NonNullable<PosterJob["aiCrops"]> = {};
   const byAspect = new Map<string, { rect: NormRect; reason: string }>();
 
   for (const size of sizesFor(job.kind)) {
-    const targetAspect = cropAspectFor(size.id, job.kind);
+    const targetAspect = cropAspectFor(size.id, job.kind, orientation);
     if (!needsReframe(sourceAspect, targetAspect)) continue;
 
     const key = targetAspect.toFixed(3);
@@ -160,16 +202,20 @@ async function reframeSizes(
 }
 
 /**
- * The collections available to suggest from.
+ * The collections available to file into.
  *
  * Best-effort: an unreachable Shopify costs a suggestion, not the batch, so a
- * failure here returns an empty list and the prompt simply omits the question.
+ * failure here returns an empty list, the prompt simply omits the question,
+ * and an auto batch's posters stay unfiled until someone re-runs or files
+ * them by hand on the review screen.
  */
-async function categoryOptions(): Promise<{ id: string; label: string }[]> {
+async function liveCategories(): Promise<Category[]> {
   try {
-    const categories = await fetchCategories();
-    return categories.map((c) => ({ id: c.id, label: c.label }));
-  } catch {
+    return await fetchCategories();
+  } catch (cause) {
+    console.warn(
+      `analyze: could not read collections from Shopify: ${cause instanceof Error ? cause.message : String(cause)}`,
+    );
     return [];
   }
 }

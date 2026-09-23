@@ -1,0 +1,39 @@
+{
+  "id": "mockup-3",
+  "name": "Mockup 3",
+  "kind": "flat",
+  "background": "background.jpg",
+  "canvas": {
+    "width": 2300,
+    "height": 2400
+  },
+  "rect": {
+    "x": 811,
+    "y": 238,
+    "width": 635,
+    "height": 898
+  },
+  "shadow": 0.22,
+  "sizing": {
+    "referenceSize": "A3",
+    "base": {
+      "x": 811,
+      "y": 238,
+      "width": 635,
+      "height": 898
+    }
+  },
+  "suits": {
+    "formats": [
+      "normal"
+    ]
+  },
+  "landscapeSizing": {
+    "base": {
+      "x": 701,
+      "y": 420,
+      "width": 880,
+      "height": 622
+    }
+  }
+}

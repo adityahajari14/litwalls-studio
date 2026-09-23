@@ -273,6 +273,12 @@ export type ComposeInput = {
    *  one — a triptych needs a wider box than a single sheet, and `fitRect`
    *  cannot tell the difference on its own since it only sees pixels. */
   isSplit?: boolean;
+  /** Whether `poster` is a SINGLE sheet whose source is landscape. Selects
+   *  the template's landscape-specific placement box when it has one, rather
+   *  than shrinking the poster to fit inside the portrait box. Ignored when
+   *  `isSplit` is set — a split set's shape is fixed regardless of source
+   *  orientation. */
+  isLandscape?: boolean;
   template: MockupTemplate;
   /** The poster to place: a path, or a buffer for an assembled split set. */
   poster: string | Buffer;
@@ -305,7 +311,12 @@ export async function composeMockup(
     // inside the rect at its true aspect ratio, then centred.
     const rect = await fitRect(
       poster,
-      rectForSize(template, sizeId, input.isSplit ?? false),
+      rectForSize(
+        template,
+        sizeId,
+        input.isSplit ?? false,
+        input.isLandscape ?? false,
+      ),
     );
 
     if (template.shadow && template.shadow > 0) {
@@ -364,7 +375,12 @@ export async function composeMockup(
       // set from being stretched to fill a portrait wall panel.
       corners: await fitQuad(
         poster,
-        quadForSize(template, sizeId, input.isSplit ?? false),
+        quadForSize(
+          template,
+          sizeId,
+          input.isSplit ?? false,
+          input.isLandscape ?? false,
+        ),
       ),
       canvas,
     });

@@ -1,3 +1,4 @@
+import { withRequiredTags } from "@/lib/print/tags";
 import type { Category } from "@/lib/print/types";
 
 /**
@@ -7,6 +8,13 @@ import type { Category } from "@/lib/print/types";
  * sometimes with a subtitle: `The Weeknd #06 - Star Boy | Music Posters`. New
  * products have to join that pattern seamlessly, which means parsing the
  * existing ones well enough to find the next free number.
+ *
+ * That format is the whole of it — there is no second style to choose
+ * between. What varies is the quality of `<Subject>` itself, which is where
+ * `isUsableSubject` earns its keep: it is the gate between whatever Gemini or
+ * a filename produced and a title that actually ships, rejecting anything
+ * that would read as broken to a customer ("Ferrari F!") in favour of a
+ * plain fallback a human fixes in one edit.
  *
  * Everything here is pure, so the review UI can preview the exact title the
  * publisher will produce rather than an approximation of it.
@@ -39,17 +47,16 @@ export function categorySuffix(category: Pick<Category, "suffix">): string {
  *
  * A manual collection has no tag, so there is nothing to add — the publisher
  * handles those with an explicit collection add.
+ *
+ * The general form is `withRequiredTags`, which the publisher uses to add the
+ * orientation and format tags at the same time. This stays as the one-category
+ * shorthand the title module has always exposed.
  */
 export function ensureCategoryTag(
   tags: readonly string[],
   category: Pick<Category, "tag">,
 ): string[] {
-  const required = category.tag;
-  if (!required) return [...tags];
-  const present = tags.some(
-    (tag) => tag.trim().toLowerCase() === required.toLowerCase(),
-  );
-  return present ? [...tags] : [required, ...tags];
+  return withRequiredTags(tags, category.tag ? [category.tag] : []);
 }
 
 export type TitleParts = {
@@ -171,18 +178,53 @@ export function sequencesBySubject(
 }
 
 /**
+ * Characters a subject or subtitle may contain.
+ *
+ * These are proper nouns — people, characters, bands, teams, car and console
+ * models — so the punctuation genuinely at home in one is narrow: an
+ * apostrophe ("Guns N' Roses"), a hyphen ("Spider-Man"), an ampersand ("Simon
+ * & Garfunkel") or a slash ("AC/DC"). A model or edition number that is part
+ * of the real name stays too ("Ferrari F1", "GT3 RS"). Anything else that
+ * reaches here is noise, not content — usually the model garbling one
+ * character (a stray "!" where a "1" belonged), and it has shipped as a live
+ * product title before this existed.
+ */
+const SUBJECT_CHARS = /^[\p{L}\p{N}\s'&/-]*$/u;
+
+/** Trim and collapse whitespace. Cosmetic only — never changes meaning. */
+export function normalizeSpacing(raw: string): string {
+  return raw.trim().replace(/\s+/g, " ");
+}
+
+/**
+ * Whether a subject or subtitle is clean enough to publish under.
+ *
+ * Rejects anything shorter than two characters, made of nothing but digits or
+ * punctuation, or carrying a character outside `SUBJECT_CHARS`. The caller's
+ * job on `false` is to fall back to something known-clean — the filename —
+ * rather than ship a title with a hallucinated symbol sitting in it.
+ */
+export function isUsableSubject(raw: string): boolean {
+  const value = normalizeSpacing(raw);
+  return (
+    value.length >= 2 && SUBJECT_CHARS.test(value) && /\p{L}/u.test(value)
+  );
+}
+
+/**
  * Turn a filename into a usable subject when the model is unavailable.
  *
  * Poster files are usually named after what they depict, so this is a
  * genuinely decent fallback rather than a placeholder — "spider-man_02.jpg"
- * becomes "Spider Man 02", which a human can fix in one edit.
+ * becomes "Spider Man 02", which a human can fix in one edit. Runs through the
+ * same character whitelist as the AI path, so an odd filename ("poster★final
+ * (1).jpg") cannot land a stray symbol in a title either.
  */
 export function subjectFromFilename(filename: string): string {
   const stem = filename.replace(/\.[^.]+$/, "");
-  return stem
-    .replace(/[_-]+/g, " ")
-    .replace(/\s+/g, " ")
-    .trim()
+  return normalizeSpacing(
+    stem.replace(/[_-]+/g, " ").replace(/[^\p{L}\p{N}\s'&/-]/gu, ""),
+  )
     .split(" ")
     .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
     .join(" ");

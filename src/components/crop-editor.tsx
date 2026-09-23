@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { cropRectFor } from "@/lib/image/crop-rect";
+import { orientationOf } from "@/lib/print/orientation";
 import { cropAspectFor } from "@/lib/print/sizes";
 import { seamPositions } from "@/lib/print/split";
 import type {
@@ -46,7 +47,14 @@ export function CropEditor({
     null,
   );
 
-  const targetAspect = cropAspectFor(sizeId, kind);
+  // Derived from the source rather than passed in, so the box drawn here is
+  // the exact shape the crop stage will cut — including for a landscape
+  // artwork, whose sheet is the size turned on its side.
+  const targetAspect = cropAspectFor(
+    sizeId,
+    kind,
+    kind === "split3" ? "portrait" : orientationOf(source),
+  );
   const computed = cropRectFor({
     source,
     targetAspect,

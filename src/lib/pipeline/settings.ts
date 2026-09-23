@@ -10,6 +10,7 @@ import {
   normalizePriceTable,
   type PartialPriceTable,
 } from "@/lib/print/pricing";
+import { DEFAULT_DESCRIPTION_TEMPLATE } from "@/lib/print/description";
 import { SETTINGS_FILE, writeJsonAtomic } from "@/lib/pipeline/paths";
 import { DEFAULT_PANEL_GAP, MAX_PANEL_GAP } from "@/lib/templates/schema";
 
@@ -60,6 +61,12 @@ export type Settings = {
    * its own `panelGap` and wins over this.
    */
   splitGap: number;
+  /**
+   * The product description, as an HTML template with `{{subject}}` and
+   * `{{format}}` tokens — see `print/description.ts`. Store copy, so it is
+   * edited from the dashboard rather than in code.
+   */
+  descriptionTemplate: string;
   updatedAt: number;
 };
 
@@ -78,6 +85,7 @@ export const DEFAULT_SETTINGS: Settings = {
   // shows something the customer will not receive.
   mockupBorder: { enabled: true, mm: TRUE_BORDER_MM },
   splitGap: DEFAULT_PANEL_GAP,
+  descriptionTemplate: DEFAULT_DESCRIPTION_TEMPLATE,
   updatedAt: 0,
 };
 
@@ -108,6 +116,9 @@ export async function readSettings(): Promise<Settings> {
       splitCompareAt: normalizePriceTable(parsed.splitCompareAt ?? {}),
       mockupBorder: normalizeBorder(parsed.mockupBorder),
       splitGap: normalizeSplitGap(parsed.splitGap),
+      descriptionTemplate: normalizeDescriptionTemplate(
+        parsed.descriptionTemplate,
+      ),
       updatedAt: typeof parsed.updatedAt === "number" ? parsed.updatedAt : 0,
     };
   } catch {
@@ -121,7 +132,7 @@ export async function readSettings(): Promise<Settings> {
 
 export async function writeSettings(
   update: Pick<Settings, "prices" | "compareAt" | "splitPrices" | "splitCompareAt"> &
-    Partial<Pick<Settings, "mockupBorder" | "splitGap">>,
+    Partial<Pick<Settings, "mockupBorder" | "splitGap" | "descriptionTemplate">>,
 ): Promise<Settings> {
   const settings: Settings = {
     prices: normalizePriceTable(update.prices),
@@ -130,6 +141,9 @@ export async function writeSettings(
     splitCompareAt: normalizePriceTable(update.splitCompareAt),
     mockupBorder: normalizeBorder(update.mockupBorder),
     splitGap: normalizeSplitGap(update.splitGap),
+    descriptionTemplate: normalizeDescriptionTemplate(
+      update.descriptionTemplate,
+    ),
     updatedAt: Date.now(),
   };
   await writeJsonAtomic(SETTINGS_FILE, settings);
@@ -167,4 +181,16 @@ function normalizeSplitGap(input: unknown): number {
   return typeof input === "number" && Number.isFinite(input)
     ? Math.min(MAX_PANEL_GAP, Math.max(0, input))
     : DEFAULT_PANEL_GAP;
+}
+
+/**
+ * A blank template would publish an empty description on every product, so
+ * that falls back to the default rather than being accepted as-is. Anything
+ * else the user typed — including one missing `{{subject}}` or `{{format}}` —
+ * is theirs to get right; this is store copy, not something worth rejecting.
+ */
+function normalizeDescriptionTemplate(input: unknown): string {
+  return typeof input === "string" && input.trim()
+    ? input
+    : DEFAULT_DESCRIPTION_TEMPLATE;
 }

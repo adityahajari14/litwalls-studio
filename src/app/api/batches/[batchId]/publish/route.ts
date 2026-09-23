@@ -75,6 +75,7 @@ export async function POST(
       settingsCompareAt: settings.compareAt,
       settingsSplitPrices: settings.splitPrices,
       settingsSplitCompareAt: settings.splitCompareAt,
+      descriptionTemplate: settings.descriptionTemplate,
       numberer,
       status,
     });

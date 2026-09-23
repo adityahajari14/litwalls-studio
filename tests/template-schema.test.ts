@@ -128,3 +128,88 @@ test("rejects a split override for an unknown size", () => {
   });
   assert.match(errors.join(" "), /unknown size "A2"/);
 });
+
+test("accepts a split-3 vertical placement box", () => {
+  const result = validateTemplate({
+    ...FLAT,
+    splitVerticalSizing: { base: { x: 300, y: 50, width: 700, height: 1900 } },
+  });
+  assert.equal(result.ok, true);
+});
+
+test("rejects a split vertical placement with a malformed base area", () => {
+  const errors = errorsOf({
+    ...FLAT,
+    splitVerticalSizing: { base: { x: 300, y: 50, width: -5, height: 1900 } },
+  });
+  assert.match(errors.join(" "), /splitVerticalSizing\.base/);
+});
+
+test("rejects a split vertical override for an unknown size", () => {
+  const errors = errorsOf({
+    ...FLAT,
+    splitVerticalSizing: {
+      base: { x: 300, y: 50, width: 700, height: 1900 },
+      overrides: { A2: { x: 0, y: 0, width: 100, height: 100 } },
+    },
+  });
+  assert.match(errors.join(" "), /unknown size "A2"/);
+});
+
+test("accepts a landscape placement box", () => {
+  const result = validateTemplate({
+    ...FLAT,
+    landscapeSizing: { base: { x: 100, y: 300, width: 990, height: 700 } },
+  });
+  assert.equal(result.ok, true);
+});
+
+test("rejects a landscape placement with a malformed base area", () => {
+  const errors = errorsOf({
+    ...FLAT,
+    landscapeSizing: { base: { x: 100, y: 300, width: -5, height: 700 } },
+  });
+  assert.match(errors.join(" "), /landscapeSizing\.base/);
+});
+
+test("rejects a landscape override for an unknown size", () => {
+  const errors = errorsOf({
+    ...FLAT,
+    landscapeSizing: {
+      base: { x: 100, y: 300, width: 990, height: 700 },
+      overrides: { A2: { x: 0, y: 0, width: 100, height: 100 } },
+    },
+  });
+  assert.match(errors.join(" "), /unknown size "A2"/);
+});
+
+test("accepts a suits declaration with known literals", () => {
+  const result = validateTemplate({
+    ...FLAT,
+    suits: { formats: ["split3"], orientations: ["portrait", "landscape"] },
+  });
+  assert.equal(result.ok, true);
+});
+
+test("suits may be omitted, or hold empty arrays", () => {
+  assert.equal(validateTemplate({ ...FLAT, suits: {} }).ok, true);
+  assert.equal(
+    validateTemplate({ ...FLAT, suits: { formats: [] } }).ok,
+    true,
+  );
+});
+
+test("rejects an unknown suits.formats value", () => {
+  const errors = errorsOf({ ...FLAT, suits: { formats: ["triptych"] } });
+  assert.match(errors.join(" "), /suits\.formats/);
+});
+
+test("rejects an unknown suits.orientations value", () => {
+  const errors = errorsOf({ ...FLAT, suits: { orientations: ["sideways"] } });
+  assert.match(errors.join(" "), /suits\.orientations/);
+});
+
+test("rejects a non-array suits facet", () => {
+  const errors = errorsOf({ ...FLAT, suits: { formats: "split3" } });
+  assert.match(errors.join(" "), /suits\.formats.*must be an array/);
+});

@@ -1,17 +1,23 @@
 import "server-only";
 
 import { askGemini, geminiConfigured, prepareImage } from "@/lib/gemini/client";
-import { subjectFromFilename } from "@/lib/print/title";
-import type { AiMetadata, Category } from "@/lib/print/types";
+import {
+  isUsableSubject,
+  normalizeSpacing,
+  subjectFromFilename,
+} from "@/lib/print/title";
+import type { AiMetadata, Category, PosterKind } from "@/lib/print/types";
 
 /**
- * Identify what a poster depicts.
+ * Identify what a poster depicts, and write its description.
  *
- * The job here is IDENTIFICATION, not copywriting. Gemini returns a subject,
- * an optional subtitle, tags and alt text. It does not write descriptions
- * (every product shares one static template) and it does not assemble the
- * title or choose the number — formatTitle and the Numberer do those, from
- * live catalogue data.
+ * Gemini returns a subject, an optional subtitle, tags, alt text, and a
+ * short description paragraph — one call, since it already has the image
+ * loaded for the rest of this. It does not assemble the title or choose the
+ * number — formatTitle and the Numberer do those, from live catalogue data —
+ * and it does not write the policy block (border, adhesive, colour) that
+ * `print/description.ts` appends after this paragraph: that part is store
+ * policy, identical on every product, and lives in Settings instead.
  */
 
 const SCHEMA = {
@@ -21,9 +27,10 @@ const SCHEMA = {
     subtitle: { type: ["string", "null"] },
     tags: { type: "array", items: { type: "string" } },
     altText: { type: "string" },
-    collection: { type: ["string", "null"] },
+    description: { type: "string" },
+    collections: { type: "array", items: { type: "string" } },
   },
-  required: ["subject", "tags", "altText"],
+  required: ["subject", "tags", "altText", "description"],
 } as const;
 
 type RawMetadata = {
@@ -31,34 +38,69 @@ type RawMetadata = {
   subtitle: string | null;
   tags: string[];
   altText: string;
-  /** Suggested collection handle. Null when the model is unsure. */
-  collection: string | null;
+  description: string;
+  /**
+   * Suggested collection handles, MOST RELEVANT FIRST. Empty when the model
+   * is unsure or was not offered a list.
+   */
+  collections: string[];
 };
 
+/** Longest description paragraph accepted, in characters. */
+const MAX_DESCRIPTION = 600;
+
 function buildPrompt(options: {
-  category: Pick<Category, "label">;
+  /** Null on an auto batch: the model is choosing, so naming an answer up
+   *  front would only anchor it. */
+  category: Pick<Category, "label"> | null;
+  kind: PosterKind;
   knownSubjects: string[];
   knownTags: string[];
   collections: { id: string; label: string }[];
 }): string {
-  const { category, knownSubjects, knownTags } = options;
+  const { category, kind, knownSubjects, knownTags } = options;
+  const format =
+    kind === "split3" ? "a three-panel split set" : "a single sheet";
 
   return [
-    `You are cataloguing a poster for Litwalls, a poster shop. This poster belongs to the ${category.label} collection.`,
+    category
+      ? `You are cataloguing a poster for Litwalls, a poster shop. This poster belongs to the ${category.label} collection.`
+      : "You are cataloguing a poster for Litwalls, a poster shop. Nobody has filed it yet, so you are choosing which collections it belongs in.",
     "",
     "Identify the poster and return JSON with these fields:",
     "",
-    '- "subject": the character, artist, band or film depicted. Two to four words.',
-    "  Examples of the house style: \"Spider Man\", \"The Weeknd\", \"Blackpink\".",
-    "  Do NOT include the word Poster, the collection name, or any number.",
+    '- "subject": the character, artist, band, team or vehicle depicted. Two',
+    "  to four words, written out in full. A model or edition number that is",
+    '  part of the real name STAYS IN — "Ferrari F1", "GT3 RS", "Blink-182" —',
+    "  never trim one of those down to a bare letter or a symbol. What you",
+    "  must NOT do is invent a catalogue number of your own, or include the",
+    "  word Poster or the collection name; those are added separately.",
+    "  Examples of the house style: \"Spider Man\", \"The Weeknd\", \"Blackpink\",",
+    '  "Ferrari F1".',
+    "  Use only letters, numbers, spaces, apostrophes, hyphens, ampersands",
+    "  and slashes — no other punctuation or symbols, even if unsure exactly",
+    "  what a small detail in the artwork says.",
     "",
     '- "subtitle": ONLY if the poster clearly depicts a specific named album,',
     "  tour or storyline (e.g. \"Star Boy\", \"After Hours\"). Otherwise null.",
     "  Prefer null — most posters do not have one, and a spurious subtitle",
-    "  splits a subject's numbering in two.",
+    "  splits a subject's numbering in two. Same character rule as subject.",
     "",
     '- "tags": 3 to 6 tags in Title Case.',
     '- "altText": one plain descriptive sentence, at most 125 characters.',
+    "",
+    // Free text rather than a filled-in template, so 500 products don't read
+    // as the same paragraph with a name swapped in. Each call gets its own
+    // wording — that's the point of asking the model instead of templating.
+    '- "description": the opening paragraph of the product page. Two to',
+    "  four plain sentences, written fresh for this poster — do not reuse",
+    "  stock phrasing you'd use for a different one. Name the subject, then",
+    "  work in the print quality (thick matte paper, sharp detail,",
+    `  fade-resistant) and where it suits a room. State plainly that this`,
+    `  poster is ${format} — always include that, in your own words, never`,
+    "  leave it out. Tone: simple and professional, like a retail listing,",
+    "  not a hype ad. No headings, no bullet points, no markdown, no quotes.",
+    `  At most ${MAX_DESCRIPTION} characters.`,
     "",
     // The batch picks a collection, but a batch is often mixed — a Marvel drop
     // that contains a Star Wars poster. Asking per poster catches the one that
@@ -66,8 +108,14 @@ function buildPrompt(options: {
     // fails to appear in the collection a customer is browsing.
     options.collections.length > 0
       ? [
-          '- "collection": which of these the poster belongs in, by handle.',
-          "  Reply with null if it does not clearly fit any of them:",
+          '- "collections": every one of these the poster genuinely belongs',
+          "  in, by handle, MOST RELEVANT FIRST. The first is the MAIN",
+          "  collection and its name goes in the product title, so lead with",
+          "  the one a shopper would most expect to find this under. Include",
+          "  the others only where someone browsing them would reasonably",
+          "  expect to see this poster: a Spider-Man belongs in Marvel and in",
+          "  Movies & TV, but not in Music. Two to four is typical. Reply with",
+          "  an empty array if none of them fit:",
           options.collections
             .map((c) => `    ${c.id} — ${c.label}`)
             .join("\n"),
@@ -102,25 +150,42 @@ function parse(value: unknown): RawMetadata | null {
   if (typeof value !== "object" || value === null) return null;
   const raw = value as Record<string, unknown>;
 
-  const subject = typeof raw.subject === "string" ? raw.subject.trim() : "";
-  if (!subject) return null;
+  // Rejecting rather than trying to salvage a bad subject: this is what stops
+  // a hallucinated symbol — "Ferrari F!" instead of "Ferrari F1" — from ever
+  // reaching a title. Failing the parse sends the caller to fallbackMetadata,
+  // which derives a plain, known-clean subject from the filename instead, and
+  // flags the job for a human to fix rather than shipping the garbled one.
+  const subject =
+    typeof raw.subject === "string" ? normalizeSpacing(raw.subject) : "";
+  if (!isUsableSubject(subject)) return null;
 
   const tags = Array.isArray(raw.tags)
     ? raw.tags.filter((t): t is string => typeof t === "string" && t.trim() !== "")
     : [];
 
+  const subtitle =
+    typeof raw.subtitle === "string" ? normalizeSpacing(raw.subtitle) : "";
+
   return {
     subject,
-    subtitle:
-      typeof raw.subtitle === "string" && raw.subtitle.trim()
-        ? raw.subtitle.trim()
-        : null,
+    subtitle: subtitle && isUsableSubject(subtitle) ? subtitle : null,
     tags: tags.map((t) => t.trim()).slice(0, 8),
     altText: typeof raw.altText === "string" ? raw.altText.trim().slice(0, 125) : "",
-    collection:
-      typeof raw.collection === "string" && raw.collection.trim()
-        ? raw.collection.trim()
-        : null,
+    description:
+      typeof raw.description === "string"
+        ? raw.description.trim().slice(0, MAX_DESCRIPTION)
+        : "",
+    // Tolerates the older single-string shape as well as the array, so a
+    // response from a model that ignored the schema still lands somewhere
+    // useful rather than being dropped whole.
+    collections: Array.isArray(raw.collections)
+      ? raw.collections
+          .filter((c): c is string => typeof c === "string" && c.trim() !== "")
+          .map((c) => c.trim())
+          .slice(0, 6)
+      : typeof raw.collection === "string" && raw.collection.trim()
+        ? [raw.collection.trim()]
+        : [],
   };
 }
 
@@ -130,6 +195,10 @@ function parse(value: unknown): RawMetadata | null {
  * A filename-derived subject is a genuinely decent starting point — poster
  * files are usually named after what they depict — and it is one edit away
  * from correct. Badged as "fallback" so the review UI can say so.
+ *
+ * `description` is left blank rather than templated here: `descriptionFor`
+ * builds a plain fallback line from `subject` when it finds one empty, and
+ * duplicating that logic here would just be a second place for it to drift.
  */
 export function fallbackMetadata(sourceName: string): AiMetadata {
   return {
@@ -138,6 +207,7 @@ export function fallbackMetadata(sourceName: string): AiMetadata {
     sequence: null,
     tags: [],
     altText: "",
+    description: "",
     source: "fallback",
   };
 }
@@ -145,7 +215,9 @@ export function fallbackMetadata(sourceName: string): AiMetadata {
 export async function describePoster(options: {
   image: string | Buffer;
   sourceName: string;
-  category: Pick<Category, "label">;
+  /** Null on an auto batch. See `buildPrompt`. */
+  category: Pick<Category, "label"> | null;
+  kind: PosterKind;
   knownSubjects: string[];
   knownTags: string[];
   collections?: { id: string; label: string }[];
@@ -172,7 +244,9 @@ export async function describePoster(options: {
       sequence: null, // assigned at publish time, from the live catalogue
       tags: result.value.tags,
       altText: result.value.altText,
-      suggestedCategoryId: result.value.collection,
+      description: result.value.description,
+      suggestedCategoryId: result.value.collections[0] ?? null,
+      suggestedCategoryIds: result.value.collections,
       source: "gemini",
     };
   } catch (cause) {

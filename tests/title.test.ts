@@ -4,7 +4,9 @@ import { test } from "node:test";
 
 import {
   formatTitle,
+  isUsableSubject,
   nextSequence,
+  normalizeSpacing,
   parseTitle,
   sequencesBySubject,
   subjectFromFilename,
@@ -174,4 +176,43 @@ test("no subject would be handed an already-taken number", () => {
 test("subjectFromFilename produces a usable fallback", () => {
   assert.equal(subjectFromFilename("spider-man_02.jpg"), "Spider Man 02");
   assert.equal(subjectFromFilename("the weeknd.png"), "The Weeknd");
+});
+
+test("subjectFromFilename strips stray symbols a weird filename might carry", () => {
+  assert.equal(
+    subjectFromFilename("poster ★ final (1).jpg"),
+    "Poster Final 1",
+  );
+});
+
+test("isUsableSubject accepts real proper nouns, including model numbers", () => {
+  for (const subject of [
+    "Spider Man",
+    "The Weeknd",
+    "Ferrari F1",
+    "AC/DC",
+    "Guns N' Roses",
+    "Simon & Garfunkel",
+    "GT3 RS",
+    "U2",
+  ]) {
+    assert.ok(isUsableSubject(subject), subject);
+  }
+});
+
+test("isUsableSubject rejects the exact failure this guards against", () => {
+  // A hallucinated symbol where a model number belonged — this shipped as a
+  // live product title before this check existed.
+  assert.equal(isUsableSubject("Ferrari F!"), false);
+});
+
+test("isUsableSubject rejects garbage and near-empty subjects", () => {
+  for (const subject of ["", "!", "1", "12", "---", "!!!", "@"]) {
+    assert.equal(isUsableSubject(subject), false, subject);
+  }
+});
+
+test("normalizeSpacing trims and collapses whitespace only", () => {
+  assert.equal(normalizeSpacing("  The   Weeknd  "), "The Weeknd");
+  assert.equal(normalizeSpacing("Spider-Man"), "Spider-Man");
 });

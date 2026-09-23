@@ -119,16 +119,19 @@ export async function advanceJob(
 }
 
 /**
- * Run a batch, a couple of posters at a time.
+ * Run a batch, several posters at a time.
  *
- * Concurrency 2 rather than higher: Lanczos on a 5000px master plus four JPEG
- * encodes will saturate a laptop, and this runs next to the user's browser.
- * Going wider makes the whole machine unresponsive to finish marginally sooner.
+ * The AI upscale stage's own CPU-bound work now happens in a separate pool of
+ * processes (see ai-upscale.ts, upscale-pool.ts), which has its own cap on
+ * how many posters it upscales at once. This concurrency figure is no longer
+ * fighting that — it just controls how many jobs can be mid-flight on the
+ * OTHER stages (Gemini calls, sharp renders) at the same time, so it can
+ * afford to be higher than before without making the machine unresponsive.
  */
 export async function runJobs(
   batchId: string,
   jobIds: string[],
-  concurrency = 2,
+  concurrency = 4,
 ): Promise<void> {
   const queue = [...jobIds];
 
