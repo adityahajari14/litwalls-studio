@@ -3,7 +3,8 @@ import "server-only";
 import { runAiUpscale4x } from "@/lib/pipeline/stages/upscale-pool";
 
 /**
- * 4x super-resolution via the 4x-UltraSharp ONNX model, run locally on CPU.
+ * 4x super-resolution via the 4x-UltraSharp ONNX model, run locally — on the
+ * GPU where DirectML is available, on CPU otherwise (see upscale-pool.ts).
  *
  * Unlike Lanczos resampling (see `upscale.ts`), this regenerates plausible
  * fine detail rather than smoothly stretching existing pixels — the

@@ -14,16 +14,33 @@ import { join } from "node:path";
  * and not even this batch's own SSE progress stream could respond until the
  * model finished. A pool of forked processes fixes both halves of that: the
  * server stays free to keep answering while the heavy work happens elsewhere,
- * and — unlike one thread doing everything in turn — several posters can
- * genuinely upscale at once on separate cores.
+ * and — on CPU, unlike one thread doing everything in turn — several posters
+ * can genuinely upscale at once on separate cores.
  */
 
 const WORKER_PATH = join(process.cwd(), "scripts", "upscale-worker.mjs");
 
-/** Leaves a couple of cores for the server itself and whatever else is running. */
-const POOL_SIZE = Math.max(1, Math.min(4, cpus().length - 2));
+/**
+ * Run the model on the GPU through DirectML wherever that exists.
+ *
+ * Measured on the 6-core laptop this runs on, integrated graphics alone get
+ * through about 2.5x the tiles per second of four CPU workers, with output
+ * that matches to within one 8-bit level on a few values per hundred
+ * thousand. `UPSCALE_DEVICE=cpu` in .env.local forces the CPU pool instead.
+ */
+const USE_GPU =
+  process.platform === "win32" && process.env.UPSCALE_DEVICE !== "cpu";
 
-/** Each worker's own ONNX session defaults to using every core; told to share instead. */
+/**
+ * One worker on GPU: there is a single adapter, so a second session only
+ * queues behind the first while holding its own copy of the model in memory —
+ * and CPU workers alongside it gain nothing either, as they slow the GPU by
+ * as much as they add. On CPU, leave a couple of cores for the server itself
+ * and whatever else is running.
+ */
+const POOL_SIZE = USE_GPU ? 1 : Math.max(1, Math.min(4, cpus().length - 2));
+
+/** Each CPU worker's own ONNX session defaults to using every core; told to share instead. */
 const THREADS_PER_WORKER = Math.max(1, Math.floor(cpus().length / POOL_SIZE));
 
 type UpscaleResult = { width: number; height: number };
@@ -44,7 +61,15 @@ let nextId = 0;
 
 function spawnChild(): ChildProcess {
   return fork(WORKER_PATH, {
-    env: { ...process.env, UPSCALE_INTRA_OP_THREADS: String(THREADS_PER_WORKER) },
+    env: {
+      ...process.env,
+      UPSCALE_DEVICE: USE_GPU ? "gpu" : "cpu",
+      // Only the CPU pool shares cores. A lone GPU worker that had to fall
+      // back to CPU is better off with ONNX's default of all of them.
+      ...(USE_GPU
+        ? {}
+        : { UPSCALE_INTRA_OP_THREADS: String(THREADS_PER_WORKER) }),
+    },
   });
 }
 

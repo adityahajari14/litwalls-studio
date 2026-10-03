@@ -26,20 +26,121 @@ const TILE_SIZE = 128;
 const OVERLAP = 16;
 
 /**
- * Set by the parent so N sibling processes divide the machine's cores between
- * them instead of each defaulting to all of them and fighting over cache and
- * scheduler time.
+ * Where inference runs, chosen by the parent (see upscale-pool.ts): "gpu" asks
+ * for DirectML, which ships inside onnxruntime-node on Windows and drives any
+ * Direct3D 12 adapter, integrated graphics included.
+ */
+const useGpu = process.env.UPSCALE_DEVICE === "gpu";
+
+/**
+ * Set by the parent so N sibling CPU processes divide the machine's cores
+ * between them instead of each defaulting to all of them and fighting over
+ * cache and scheduler time.
  */
 const intraOpNumThreads = Number(process.env.UPSCALE_INTRA_OP_THREADS) || undefined;
 
+/** Set to pin one adapter by its DirectML index instead of timing them all. */
+const pinnedAdapter =
+  process.env.UPSCALE_GPU_DEVICE_ID === undefined ||
+  process.env.UPSCALE_GPU_DEVICE_ID === ""
+    ? null
+    : Number(process.env.UPSCALE_GPU_DEVICE_ID);
+
+/** More adapters than any machine this runs on will have; indexes past the last one just fail fast. */
+const MAX_ADAPTERS = 4;
+
+/** Small enough to cost a fraction of a second per adapter, big enough to tell them apart. */
+const PROBE_SIZE = 64;
+
+function createGpuSession(deviceId) {
+  return InferenceSession.create(MODEL_PATH, {
+    executionProviders: [{ name: "dml", deviceId }],
+    // Both are requirements of the DirectML provider, not tuning.
+    enableMemPattern: false,
+    executionMode: "sequential",
+  });
+}
+
+async function probeMs(session) {
+  const feed = () => ({
+    input: new Tensor(
+      "float32",
+      new Float32Array(3 * PROBE_SIZE * PROBE_SIZE),
+      [1, 3, PROBE_SIZE, PROBE_SIZE],
+    ),
+  });
+  // The first run pays for shader compilation, and on a laptop for waking a
+  // sleeping discrete card; only the second says how fast the adapter is.
+  await session.run(feed());
+  const start = performance.now();
+  await session.run(feed());
+  return performance.now() - start;
+}
+
+/**
+ * A session on whichever adapter actually runs the model fastest.
+ *
+ * DirectML's default is adapter 0, and on a laptop with both integrated
+ * graphics and a discrete card that is normally the integrated one, because
+ * it drives the display. The provider only takes an index — there is no "the
+ * fast one" option, and no adapter names to match on — so each adapter is
+ * timed on one small tile and the winner kept.
+ */
+async function fastestGpuSession() {
+  let best = null;
+  const timings = [];
+
+  for (let deviceId = 0; deviceId < MAX_ADAPTERS; deviceId++) {
+    let session;
+    try {
+      session = await createGpuSession(deviceId);
+      const ms = await probeMs(session);
+      timings.push(`#${deviceId} ${Math.round(ms)}ms`);
+      if (!best || ms < best.ms) {
+        await best?.session.release();
+        best = { session, ms, deviceId };
+        session = null;
+      }
+    } catch {
+      // No adapter at this index, or one DirectML refuses (the software
+      // renderer). Not necessarily the end of the list, so keep going.
+    }
+    await session?.release();
+  }
+
+  if (!best) throw new Error("no DirectML adapter could run the model");
+  console.log(
+    `[upscale] using GPU adapter #${best.deviceId} (probe: ${timings.join(", ")})`,
+  );
+  return best.session;
+}
+
+async function createSession() {
+  if (useGpu) {
+    try {
+      return pinnedAdapter === null
+        ? await fastestGpuSession()
+        : await createGpuSession(pinnedAdapter);
+    } catch (cause) {
+      // No usable adapter or driver. Same weights on CPU give the same picture,
+      // only slower, so that beats failing every poster in the batch.
+      console.warn(
+        `[upscale] GPU unavailable, falling back to CPU: ${
+          cause instanceof Error ? cause.message : String(cause)
+        }`,
+      );
+    }
+  }
+
+  return InferenceSession.create(MODEL_PATH, {
+    executionProviders: ["cpu"],
+    ...(intraOpNumThreads ? { intraOpNumThreads } : {}),
+  });
+}
+
 let sessionPromise = null;
 function getSession() {
-  if (!sessionPromise) {
-    sessionPromise = InferenceSession.create(MODEL_PATH, {
-      executionProviders: ["cpu"],
-      ...(intraOpNumThreads ? { intraOpNumThreads } : {}),
-    });
-  }
+  if (!sessionPromise) sessionPromise = createSession();
   return sessionPromise;
 }
 

@@ -121,7 +121,7 @@ export async function advanceJob(
 /**
  * Run a batch, several posters at a time.
  *
- * The AI upscale stage's own CPU-bound work now happens in a separate pool of
+ * The AI upscale stage's own heavy work now happens in a separate pool of
  * processes (see ai-upscale.ts, upscale-pool.ts), which has its own cap on
  * how many posters it upscales at once. This concurrency figure is no longer
  * fighting that — it just controls how many jobs can be mid-flight on the
