@@ -99,26 +99,45 @@ export async function upscale(job: PosterJob): Promise<ProbeResult> {
       .png({ compressionLevel: 6 })
       .toFile(master);
   } else {
-    // Orient first: the AI model must see the image the way it will actually
-    // display, not however EXIF says to rotate it later.
-    const orientedPath = `${master}.oriented.png`;
-    await sharp(source).autoOrient().png().toFile(orientedPath);
-
-    // The model is fixed at 4x. Run it once, then Lanczos to exactly the
-    // scale this job needs: DOWN when the target is under 4x (still built
-    // from regenerated detail, just trimmed back), or UP when the target
-    // exceeds 4x (the AI pass supplies real detail for the first 4x, and
-    // Lanczos stretches the remainder rather than running the model twice —
-    // a second AI pass would compound its own artifacts on invented pixels,
-    // which is worse than an honest, smooth stretch on top of real detail).
-    const aiPath = `${master}.ai4x.png`;
-    await aiUpscale4x(orientedPath, aiPath);
-
     const targetWidth = Math.round(width * scale);
     const targetHeight = Math.round(height * scale);
 
+    // Orient first: the AI model must see the image the way it will actually
+    // display, not however EXIF says to rotate it later.
+    //
+    // When the target is under 4x, feed the model a copy shrunk to a quarter
+    // of the target instead of the full source. Its 4x output then lands on
+    // the target itself, rather than at 4x the source only to be thrown away
+    // by a Lanczos shrink — a 2000x3000 source headed for ~3600x5400 would
+    // otherwise run as 8000x12000, six times the tiles for pixels nobody
+    // keeps. Model cost scales with input pixels, so this is where the time
+    // goes. The model regenerates its detail from the shrunk copy, which
+    // sharpens soft artwork rather than preserving every source pixel. A
+    // target at or over 4x needs the whole source, so is left as it was.
+    const modelWidth = Math.ceil(targetWidth / MODEL_SCALE);
+    const modelHeight = Math.ceil(targetHeight / MODEL_SCALE);
+    const orientedPath = `${master}.oriented.png`;
+    let oriented = sharp(source).autoOrient();
+    if (modelWidth < width && modelHeight < height) {
+      oriented = oriented.resize(modelWidth, modelHeight, {
+        kernel: "lanczos3",
+        fit: "fill",
+      });
+    }
+    await oriented.png().toFile(orientedPath);
+
+    // The model is fixed at 4x. Run it once, then Lanczos to exactly the
+    // scale this job needs: DOWN by at most a few rounding pixels when the
+    // target is under 4x (see above), or UP when the target exceeds 4x (the
+    // AI pass supplies real detail for the first 4x, and Lanczos stretches
+    // the remainder rather than running the model twice — a second AI pass
+    // would compound its own artifacts on invented pixels, which is worse
+    // than an honest, smooth stretch on top of real detail).
+    const aiPath = `${master}.ai4x.png`;
+    const ai = await aiUpscale4x(orientedPath, aiPath);
+
     let finalPipeline = sharp(aiPath);
-    if (Math.abs(scale - MODEL_SCALE) > 0.001) {
+    if (ai.width !== targetWidth || ai.height !== targetHeight) {
       finalPipeline = finalPipeline.resize(targetWidth, targetHeight, {
         kernel: "lanczos3",
         fit: "fill",
