@@ -19,6 +19,7 @@ import {
   Textarea,
 } from "@/components/ui";
 import { categoriesFor, isAutoBatch } from "@/lib/print/categories";
+import { effectiveGallery } from "@/lib/print/gallery";
 import {
   missingTags,
   ORIENTATION_TAGS,
@@ -97,13 +98,8 @@ export function ReviewScreen({
   );
   // Default the gallery to every rendered mockup, so a poster nobody curates
   // still publishes with proper images rather than none.
-  const [images, setImages] = useState<ProductImageRef[]>(
-    job.images.length > 0
-      ? job.images
-      : job.mockups.map((m) => ({
-          kind: "mockup" as const,
-          templateId: m.templateId,
-        })),
+  const [images, setImages] = useState<ProductImageRef[]>(() =>
+    effectiveGallery(job),
   );
 
   useEffect(() => {

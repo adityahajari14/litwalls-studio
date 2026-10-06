@@ -9,6 +9,7 @@ import {
   normalizeSpacing,
   parseTitle,
   sequencesBySubject,
+  stripOfficial,
   subjectFromFilename,
   subjectKey,
 } from "../src/lib/print/title.ts";
@@ -215,4 +216,21 @@ test("isUsableSubject rejects garbage and near-empty subjects", () => {
 test("normalizeSpacing trims and collapses whitespace only", () => {
   assert.equal(normalizeSpacing("  The   Weeknd  "), "The Weeknd");
   assert.equal(normalizeSpacing("Spider-Man"), "Spider-Man");
+});
+
+test("stripOfficial removes the word without leaving gaps or bad grammar", () => {
+  assert.equal(stripOfficial("Official Spider Man"), "Spider Man");
+  assert.equal(
+    stripOfficial("An official poster of The Weeknd."),
+    "A poster of The Weeknd.",
+  );
+  assert.equal(
+    stripOfficial("The official artwork, officially styled."),
+    "The artwork, styled.",
+  );
+  assert.equal(stripOfficial("Spider Man"), "Spider Man");
+});
+
+test("stripOfficial leaves words that merely contain it alone", () => {
+  assert.equal(stripOfficial("Unofficial fan art"), "Unofficial fan art");
 });

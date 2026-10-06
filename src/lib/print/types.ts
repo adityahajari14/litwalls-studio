@@ -280,6 +280,12 @@ export type ShopifyRefs = {
   variantIds: Partial<Record<SizeId, string>>;
   /** relPath → MediaImage GID, so a retry does not re-upload media. */
   mediaIds: Record<string, string>;
+  /**
+   * The number in the product's title ("#06"). Kept so a republish rewrites
+   * the same title instead of claiming the next free number and renaming a
+   * live product. Absent on products published before this was recorded.
+   */
+  sequence?: number;
   publishedAt: number | null;
 };
 

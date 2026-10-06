@@ -229,3 +229,24 @@ export function subjectFromFilename(filename: string): string {
     .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
     .join(" ");
 }
+
+/**
+ * Remove the word "official" from generated text.
+ *
+ * Litwalls does not sell licensed merchandise, so a title or description that
+ * calls a poster "official" claims something untrue. The prompt tells the
+ * model not to, but a prompt is a request, not a guarantee — this is the
+ * guarantee, applied to everything the model writes and again at publish time
+ * for posters analysed before the rule existed.
+ *
+ * "an official X" becomes "a X" so removing the word does not leave "an
+ * poster" behind.
+ */
+export function stripOfficial(text: string): string {
+  return text
+    .replace(/\b(a)n\s+official\s+(?=[^aeiou\W])/gi, "$1 ")
+    .replace(/\bofficial(?:ly)?\b[\s-]*/gi, "")
+    .replace(/\s{2,}/g, " ")
+    .replace(/\s+([,.;:!?])/g, "$1")
+    .trim();
+}

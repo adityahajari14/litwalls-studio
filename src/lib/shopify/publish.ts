@@ -5,6 +5,7 @@ import { readFile } from "node:fs/promises";
 import { stageLibraryImage } from "@/lib/library/media";
 import { jobAsset } from "@/lib/pipeline/paths";
 import { descriptionFor } from "@/lib/print/description";
+import { effectiveGallery } from "@/lib/print/gallery";
 import {
   FALLBACK_SPLIT_PRICES,
   resolvePriceTable,
@@ -16,16 +17,15 @@ import {
   seoTitleFor,
   skuFor,
 } from "@/lib/print/identity";
-import { recordPublished } from "@/lib/pipeline/registry";
+import { listPublished, recordPublished } from "@/lib/pipeline/registry";
 import { categoriesFor } from "@/lib/print/categories";
 import { productOrientation } from "@/lib/print/orientation";
 import { requiredTagsFor, withRequiredTags } from "@/lib/print/tags";
-import { formatTitle } from "@/lib/print/title";
+import { formatTitle, parseTitle, stripOfficial } from "@/lib/print/title";
 import type {
   Batch,
   Category,
   PosterJob,
-  ProductImageRef,
   ShopifyRefs,
   SizeId,
 } from "@/lib/print/types";
@@ -149,7 +149,7 @@ async function stageGallery(
   job: PosterJob,
   subject: string,
 ): Promise<{ originalSource: string; alt: string }[]> {
-  const curated = job.images.length > 0 ? job.images : defaultGallery(job);
+  const curated = effectiveGallery(job);
   const out: { originalSource: string; alt: string }[] = [];
 
   for (const ref of curated) {
@@ -176,17 +176,6 @@ async function stageGallery(
   }
 
   return out;
-}
-
-/** What the gallery contains when nobody has curated one. */
-function defaultGallery(job: PosterJob): ProductImageRef[] {
-  return [
-    ...job.mockups.map((m) => ({
-      kind: "mockup" as const,
-      templateId: m.templateId,
-    })),
-    ...job.images.filter((image) => image.kind === "library"),
-  ];
 }
 
 async function stageImage(
@@ -264,6 +253,15 @@ async function joinManualCollections(
   }
 }
 
+/** The number an already-published poster's title carries, if it can be found. */
+async function existingSequence(job: PosterJob): Promise<number | null> {
+  if (job.shopify?.sequence) return job.shopify.sequence;
+  const record = (await listPublished()).find(
+    (entry) => entry.productId === job.shopify?.productId,
+  );
+  return record ? (parseTitle(record.title)?.sequence ?? null) : null;
+}
+
 export async function publishJob(options: {
   job: PosterJob;
   batch: Batch;
@@ -284,7 +282,10 @@ export async function publishJob(options: {
   // so every size-driven step below iterates this rather than the full list.
   const sizes = sizesFor(job.kind);
 
-  const subject = job.metadata?.subject?.trim();
+  // Stripped again here, not only when Gemini answers: a poster analysed
+  // before the rule existed, or a subject typed by hand, must not publish
+  // with "official" in its title either.
+  const subject = stripOfficial(job.metadata?.subject?.trim() ?? "");
   if (!subject) return err("Set a subject before publishing.");
   if (job.assets.length === 0) return err("This poster has not been rendered.");
 
@@ -305,9 +306,23 @@ export async function publishJob(options: {
   // Claimed here, moments before the mutation, against a catalogue snapshot
   // taken for this run — not at analyze time, when a number could since have
   // been taken by another publish.
-  const sequence = job.metadata?.sequence ?? numberer.claim(subject);
+  //
+  // A republish keeps the number it already has: the catalogue now contains
+  // this very product, so claiming again would hand out the NEXT number and
+  // rename a live product. Products published before the number was recorded
+  // are recovered from the title the registry kept.
+  const sequence =
+    (job.shopify?.productId ? await existingSequence(job) : null) ??
+    job.metadata?.sequence ??
+    numberer.claim(subject);
   const title = formatTitle(
-    { subject, sequence, subtitle: job.metadata?.subtitle },
+    {
+      subject,
+      sequence,
+      subtitle: job.metadata?.subtitle
+        ? stripOfficial(job.metadata.subtitle) || null
+        : null,
+    },
     category,
   );
 
@@ -431,7 +446,7 @@ export async function publishJob(options: {
         title,
         descriptionHtml: descriptionFor(
           subject,
-          job.metadata?.description ?? "",
+          stripOfficial(job.metadata?.description ?? ""),
           options.descriptionTemplate,
         ),
         vendor: "Litwalls",
@@ -550,6 +565,7 @@ export async function publishJob(options: {
       handle: product.handle,
       variantIds,
       mediaIds,
+      sequence,
       publishedAt: Date.now(),
     });
   } catch (cause) {

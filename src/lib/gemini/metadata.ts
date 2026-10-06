@@ -4,9 +4,11 @@ import { askGemini, geminiConfigured, prepareImage } from "@/lib/gemini/client";
 import {
   isUsableSubject,
   normalizeSpacing,
+  stripOfficial,
   subjectFromFilename,
 } from "@/lib/print/title";
 import type { AiMetadata, Category, PosterKind } from "@/lib/print/types";
+import { err, type Result } from "@/lib/result";
 
 /**
  * Identify what a poster depicts, and write its description.
@@ -33,6 +35,21 @@ const SCHEMA = {
   required: ["subject", "tags", "altText", "description"],
 } as const;
 
+const TITLE_SCHEMA = {
+  type: "object",
+  properties: {
+    subject: { type: "string" },
+    subtitle: { type: ["string", "null"] },
+  },
+  required: ["subject"],
+} as const;
+
+const DESCRIPTION_SCHEMA = {
+  type: "object",
+  properties: { description: { type: "string" } },
+  required: ["description"],
+} as const;
+
 type RawMetadata = {
   subject: string;
   subtitle: string | null;
@@ -48,6 +65,52 @@ type RawMetadata = {
 
 /** Longest description paragraph accepted, in characters. */
 const MAX_DESCRIPTION = 600;
+
+/**
+ * Litwalls does not sell licensed merchandise, so calling a poster official
+ * would be a false claim. Stated in every prompt that writes text; the same
+ * word is also stripped from whatever comes back (see `stripOfficial`).
+ */
+const NO_OFFICIAL_RULE =
+  'In EVERY field, never use the word "official" (or "officially") — we do not ' +
+  "sell licensed or official merchandise, so do not imply it.";
+
+/** The subject and subtitle instructions, shared by the full catalogue call and the title-only regeneration. */
+const SUBJECT_RULES: string[] = [
+    '- "subject": the character, artist, band, team or vehicle depicted. Two',
+    "  to four words, written out in full. A model or edition number that is",
+    '  part of the real name STAYS IN — "Ferrari F1", "GT3 RS", "Blink-182" —',
+    "  never trim one of those down to a bare letter or a symbol. What you",
+    "  must NOT do is invent a catalogue number of your own, or include the",
+    "  word Poster or the collection name; those are added separately.",
+    "  Examples of the house style: \"Spider Man\", \"The Weeknd\", \"Blackpink\",",
+    '  "Ferrari F1".',
+    "  Use only letters, numbers, spaces, apostrophes, hyphens, ampersands",
+    "  and slashes — no other punctuation or symbols, even if unsure exactly",
+    "  what a small detail in the artwork says.",
+    "",
+    '- "subtitle": ONLY if the poster clearly depicts a specific named album,',
+    "  tour or storyline (e.g. \"Star Boy\", \"After Hours\"). Otherwise null.",
+    "  Prefer null — most posters do not have one, and a spurious subtitle",
+    "  splits a subject's numbering in two. Same character rule as subject.",
+    "",
+];
+
+/** The description instructions, shared by the full catalogue call and the description-only regeneration. */
+function descriptionRules(format: string): string[] {
+  return [
+      '- "description": the opening paragraph of the product page. Two to',
+      "  four plain sentences, written fresh for this poster — do not reuse",
+      "  stock phrasing you'd use for a different one. Name the subject, then",
+      "  work in the print quality (thick matte paper, sharp detail,",
+      `  fade-resistant) and where it suits a room. State plainly that this`,
+      `  poster is ${format} — always include that, in your own words, never`,
+      "  leave it out. Tone: simple and professional, like a retail listing,",
+      "  not a hype ad. No headings, no bullet points, no markdown, no quotes.",
+      `  At most ${MAX_DESCRIPTION} characters.`,
+      "",
+  ];
+}
 
 function buildPrompt(options: {
   /** Null on an auto batch: the model is choosing, so naming an answer up
@@ -69,39 +132,16 @@ function buildPrompt(options: {
     "",
     "Identify the poster and return JSON with these fields:",
     "",
-    '- "subject": the character, artist, band, team or vehicle depicted. Two',
-    "  to four words, written out in full. A model or edition number that is",
-    '  part of the real name STAYS IN — "Ferrari F1", "GT3 RS", "Blink-182" —',
-    "  never trim one of those down to a bare letter or a symbol. What you",
-    "  must NOT do is invent a catalogue number of your own, or include the",
-    "  word Poster or the collection name; those are added separately.",
-    "  Examples of the house style: \"Spider Man\", \"The Weeknd\", \"Blackpink\",",
-    '  "Ferrari F1".',
-    "  Use only letters, numbers, spaces, apostrophes, hyphens, ampersands",
-    "  and slashes — no other punctuation or symbols, even if unsure exactly",
-    "  what a small detail in the artwork says.",
+    NO_OFFICIAL_RULE,
     "",
-    '- "subtitle": ONLY if the poster clearly depicts a specific named album,',
-    "  tour or storyline (e.g. \"Star Boy\", \"After Hours\"). Otherwise null.",
-    "  Prefer null — most posters do not have one, and a spurious subtitle",
-    "  splits a subject's numbering in two. Same character rule as subject.",
-    "",
+    ...SUBJECT_RULES,
     '- "tags": 3 to 6 tags in Title Case.',
     '- "altText": one plain descriptive sentence, at most 125 characters.',
     "",
     // Free text rather than a filled-in template, so 500 products don't read
     // as the same paragraph with a name swapped in. Each call gets its own
     // wording — that's the point of asking the model instead of templating.
-    '- "description": the opening paragraph of the product page. Two to',
-    "  four plain sentences, written fresh for this poster — do not reuse",
-    "  stock phrasing you'd use for a different one. Name the subject, then",
-    "  work in the print quality (thick matte paper, sharp detail,",
-    `  fade-resistant) and where it suits a room. State plainly that this`,
-    `  poster is ${format} — always include that, in your own words, never`,
-    "  leave it out. Tone: simple and professional, like a retail listing,",
-    "  not a hype ad. No headings, no bullet points, no markdown, no quotes.",
-    `  At most ${MAX_DESCRIPTION} characters.`,
-    "",
+    ...descriptionRules(format),
     // The batch picks a collection, but a batch is often mixed — a Marvel drop
     // that contains a Star Wars poster. Asking per poster catches the one that
     // was filed in the wrong place, which is otherwise only noticed when it
@@ -156,24 +196,34 @@ function parse(value: unknown): RawMetadata | null {
   // which derives a plain, known-clean subject from the filename instead, and
   // flags the job for a human to fix rather than shipping the garbled one.
   const subject =
-    typeof raw.subject === "string" ? normalizeSpacing(raw.subject) : "";
+    typeof raw.subject === "string"
+      ? normalizeSpacing(stripOfficial(raw.subject))
+      : "";
   if (!isUsableSubject(subject)) return null;
 
   const tags = Array.isArray(raw.tags)
-    ? raw.tags.filter((t): t is string => typeof t === "string" && t.trim() !== "")
+    ? raw.tags
+        .filter((t): t is string => typeof t === "string")
+        .map((t) => stripOfficial(t))
+        .filter((t) => t !== "")
     : [];
 
   const subtitle =
-    typeof raw.subtitle === "string" ? normalizeSpacing(raw.subtitle) : "";
+    typeof raw.subtitle === "string"
+      ? normalizeSpacing(stripOfficial(raw.subtitle))
+      : "";
 
   return {
     subject,
     subtitle: subtitle && isUsableSubject(subtitle) ? subtitle : null,
     tags: tags.map((t) => t.trim()).slice(0, 8),
-    altText: typeof raw.altText === "string" ? raw.altText.trim().slice(0, 125) : "",
+    altText:
+      typeof raw.altText === "string"
+        ? stripOfficial(raw.altText).slice(0, 125)
+        : "",
     description:
       typeof raw.description === "string"
-        ? raw.description.trim().slice(0, MAX_DESCRIPTION)
+        ? stripOfficial(raw.description).slice(0, MAX_DESCRIPTION)
         : "",
     // Tolerates the older single-string shape as well as the array, so a
     // response from a model that ignored the schema still lands somewhere
@@ -257,4 +307,104 @@ export async function describePoster(options: {
     );
     return fallbackMetadata(options.sourceName);
   }
+}
+
+/**
+ * Write a new title for a poster — its subject and optional subtitle — without
+ * touching anything else about it.
+ *
+ * The number and collection suffix are not the model's to choose (see the top
+ * of this file), so this regenerates only the two parts it owns. The prompt
+ * deliberately does not show the old subject: a fresh look is the point, and
+ * naming the previous answer would only anchor the model to it.
+ */
+export async function regenerateTitle(options: {
+  image: string | Buffer;
+  category: Pick<Category, "label"> | null;
+  knownSubjects: string[];
+}): Promise<Result<{ subject: string; subtitle: string | null }>> {
+  if (!geminiConfigured()) return err("GEMINI_API_KEY is not set");
+
+  const prompt = [
+    options.category
+      ? `You are cataloguing a poster for Litwalls, a poster shop. This poster belongs to the ${options.category.label} collection.`
+      : "You are cataloguing a poster for Litwalls, a poster shop.",
+    "",
+    "Identify the poster and return JSON with these fields:",
+    "",
+    NO_OFFICIAL_RULE,
+    "",
+    ...SUBJECT_RULES,
+    options.knownSubjects.length > 0
+      ? [
+          "",
+          "These subjects already exist in this collection. If this poster shows",
+          "one of them, reply with the EXACT string as written here:",
+          options.knownSubjects.slice(0, 80).map((s) => `  ${s}`).join("\n"),
+        ].join("\n")
+      : "",
+  ]
+    .filter((line, index, all) => line !== "" || all[index - 1] !== "")
+    .join("\n");
+
+  return askGemini({
+    prompt,
+    image: await prepareImage(options.image),
+    schema: TITLE_SCHEMA as unknown as Record<string, unknown>,
+    parse: (value) => {
+      const parsed = parse({ ...(value as object), tags: [], altText: "", description: "" });
+      return parsed ? { subject: parsed.subject, subtitle: parsed.subtitle } : null;
+    },
+  });
+}
+
+/**
+ * Write a new description paragraph for a poster, leaving everything else as
+ * it is.
+ *
+ * Given the subject the poster is ALREADY filed under so the paragraph names
+ * what the title says, and the previous paragraph so the new one reads
+ * differently — asking again for the same text would make the button pointless.
+ */
+export async function regenerateDescription(options: {
+  image: string | Buffer;
+  kind: PosterKind;
+  subject: string;
+  previous: string;
+}): Promise<Result<string>> {
+  if (!geminiConfigured()) return err("GEMINI_API_KEY is not set");
+
+  const format =
+    options.kind === "split3" ? "a three-panel split set" : "a single sheet";
+
+  const prompt = [
+    `You are writing product copy for Litwalls, a poster shop. This poster is "${options.subject}".`,
+    "",
+    "Return JSON with one field:",
+    "",
+    NO_OFFICIAL_RULE,
+    "",
+    ...descriptionRules(format),
+    options.previous.trim()
+      ? [
+          "",
+          "An earlier version of this paragraph is below. Write a new one that",
+          "reads clearly differently — new wording and sentence structure — and",
+          "does not copy it:",
+          `  ${options.previous.trim()}`,
+        ].join("\n")
+      : "",
+  ].join("\n");
+
+  return askGemini({
+    prompt,
+    image: await prepareImage(options.image),
+    schema: DESCRIPTION_SCHEMA as unknown as Record<string, unknown>,
+    parse: (value) => {
+      const text = (value as { description?: unknown } | null)?.description;
+      if (typeof text !== "string") return null;
+      const cleaned = stripOfficial(text).slice(0, MAX_DESCRIPTION);
+      return cleaned ? cleaned : null;
+    },
+  });
 }

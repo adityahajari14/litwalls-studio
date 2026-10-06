@@ -1,3 +1,4 @@
+import { listPublished } from "@/lib/pipeline/registry";
 import { readSettings } from "@/lib/pipeline/settings";
 import { listJobs, readBatch, updateJob } from "@/lib/pipeline/store";
 import { hasReached } from "@/lib/print/types";
@@ -27,24 +28,52 @@ export async function POST(
   }
 
   let status: "ACTIVE" | "DRAFT" = "DRAFT";
+  let republish = false;
+  let onlyJobIds: string[] | null = null;
   try {
-    const body = (await request.json()) as { status?: string };
+    const body = (await request.json()) as {
+      status?: string;
+      republish?: boolean;
+      jobIds?: unknown;
+    };
     if (body.status === "ACTIVE") status = "ACTIVE";
+    republish = body.republish === true;
+    if (Array.isArray(body.jobIds)) {
+      onlyJobIds = body.jobIds.filter((id): id is string => typeof id === "string");
+    }
   } catch {
     // No body: keep the safer default.
   }
 
   const jobs = await listJobs(batchId);
+  // A republish re-sends posters that already have a Shopify product, updating
+  // it in place (publishJob passes the existing product id). The normal run
+  // skips those, so it can never touch a live product by accident.
   const ready = jobs.filter(
-    (job) => hasReached(job.stage, "approved") && !job.shopify?.productId,
+    (job) =>
+      hasReached(job.stage, "approved") &&
+      Boolean(job.shopify?.productId) === republish &&
+      (onlyJobIds === null || onlyJobIds.includes(job.id)),
   );
 
   if (ready.length === 0) {
     return Response.json({
       published: 0,
       failed: 0,
-      message: "Nothing approved and unpublished in this batch.",
+      message: republish
+        ? "No published posters to republish in this batch."
+        : "Nothing approved and unpublished in this batch.",
     });
+  }
+
+  // A republish keeps each product's CURRENT status rather than applying the
+  // dashboard's draft default, which would silently pull a live product off
+  // the storefront. The registry is where that status was recorded.
+  const currentStatus = new Map<string, "ACTIVE" | "DRAFT">();
+  if (republish) {
+    for (const record of await listPublished()) {
+      currentStatus.set(record.productId, record.status);
+    }
   }
 
   let numberer: Numberer;
@@ -77,7 +106,9 @@ export async function POST(
       settingsSplitCompareAt: settings.splitCompareAt,
       descriptionTemplate: settings.descriptionTemplate,
       numberer,
-      status,
+      status: republish
+        ? (currentStatus.get(job.shopify!.productId) ?? "DRAFT")
+        : status,
     });
 
     if (result.ok) {
@@ -105,6 +136,7 @@ export async function POST(
   return Response.json({
     published: results.filter((r) => r.ok).length,
     failed: results.filter((r) => !r.ok).length,
+    republish,
     status,
     results,
     jobs: await listJobs(batchId),

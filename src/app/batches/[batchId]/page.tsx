@@ -4,6 +4,7 @@ import { DropZone } from "@/app/batches/[batchId]/drop-zone";
 import { DeleteBatch } from "@/components/delete-batch";
 import { JobGrid } from "@/components/job-grid";
 import { PublishButton } from "@/components/publish-button";
+import { RegenerateButtons } from "@/components/regenerate-buttons";
 import { RunButton } from "@/components/run-button";
 import { Badge, BackLink, PageHeader, Section } from "@/components/ui";
 import { hasReached } from "@/lib/print/types";
@@ -83,7 +84,17 @@ export default async function BatchPage(
             {unprocessed.length > 0 ? (
               <RunButton batchId={batch.id} pending={unprocessed.length} />
             ) : null}
-            {approved.length > 0 ? <PublishButton batchId={batch.id} /> : null}
+            {approved.length > 0 ? (
+              <PublishButton
+                batchId={batch.id}
+                unpublished={
+                  approved.filter((job) => !job.shopify?.productId).length
+                }
+                published={
+                  approved.filter((job) => job.shopify?.productId).length
+                }
+              />
+            ) : null}
           </>
         }
       />
@@ -92,7 +103,15 @@ export default async function BatchPage(
         <DropZone batchId={batch.id} initialCount={jobs.length} />
       </div>
 
-      <Section title="Posters" className="mt-8">
+      <Section
+        title="Posters"
+        className="mt-8"
+        action={
+          jobs.some((job) => job.metadata) ? (
+            <RegenerateButtons batchId={batch.id} />
+          ) : null
+        }
+      >
         <JobGrid batchId={batch.id} initialJobs={jobs} />
       </Section>
 
