@@ -113,6 +113,44 @@ async function renderOne(options: {
   };
 }
 
+/**
+ * Render a rendered print file again as lossless PNG, for archiving to Drive.
+ *
+ * The same crop, the same pixel dimensions, the same sharpening and the same
+ * colour profile and density tag as the JPEG in `sizes/` — only the encoding
+ * differs. Cut from the master rather than by re-reading the JPEG, which would
+ * carry the JPEG's compression artifacts into the "lossless" file.
+ *
+ * Done on demand instead of for every poster at crop time: the JPEGs are what
+ * the review screen and the mockups use, and lossless files of this size are
+ * only ever wanted once, at the moment they are filed away.
+ */
+export async function renderLosslessPrintFile(
+  job: PosterJob,
+  asset: RenderedAsset,
+  outPath: string,
+): Promise<void> {
+  if (!job.probe) throw new Error("rendering requires a completed probe");
+
+  const px = toPixelRect(asset.crop, {
+    width: job.probe.width,
+    height: job.probe.height,
+  });
+
+  const rendered = sharp(jobAsset(job.batchId, job.id, MASTER_FILE))
+    .extract({
+      left: px.left,
+      top: px.top,
+      width: px.width,
+      height: px.height,
+    })
+    .resize(asset.width, asset.height, { kernel: "lanczos3", fit: "fill" });
+
+  await finishPrintFile(rendered, { density: printDpi(asset.sizeId) })
+    .png({ compressionLevel: 6 })
+    .toFile(outPath);
+}
+
 export async function cropAll(job: PosterJob): Promise<RenderedAsset[]> {
   if (!job.probe) throw new Error("crop requires a completed probe");
 

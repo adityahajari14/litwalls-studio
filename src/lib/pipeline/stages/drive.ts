@@ -1,6 +1,9 @@
 import "server-only";
 
+import { rm } from "node:fs/promises";
+
 import { ensureFolderPath, uploadFile } from "@/lib/drive/files";
+import { renderLosslessPrintFile } from "@/lib/pipeline/stages/crop";
 import { jobAsset } from "@/lib/pipeline/paths";
 import { readBatch, updateJob } from "@/lib/pipeline/store";
 import { mainCategoryFor } from "@/lib/print/categories";
@@ -101,23 +104,62 @@ export async function uploadToDrive(job: PosterJob): Promise<Result<DriveRefs>> 
   const files =
     existing.folderId === folder.value ? { ...existing.files } : {};
 
+  // What goes to Drive is the artwork a printer needs, and nothing else:
+  //   - the original, byte for byte, exactly as it was supplied; and
+  //   - every print file, re-rendered LOSSLESS (PNG). The JPEGs in `sizes/`
+  //     are quality 95 and fine for a screen, but this folder is the archive
+  //     the prints are made from, so it gets no compression artifacts at all.
+  // Mockups are deliberately not here: they are marketing images that live on
+  // Shopify, and filing them beside the print files would only bury the files
+  // someone is looking for.
+  //
+  // The key for a print file is its PNG name, so posters filed before this
+  // (whose entries are the old .jpg paths) upload the lossless versions
+  // instead of being skipped as "already there".
   const targets = [
-    { relPath: job.sourceRelPath, name: `original${extensionOf(job.sourceRelPath)}` },
-    ...job.assets.map((asset) => ({
-      relPath: asset.relPath,
-      name: asset.relPath.split("/").pop() ?? asset.relPath,
-    })),
+    {
+      key: job.sourceRelPath,
+      name: `original${extensionOf(job.sourceRelPath)}`,
+      render: null as null | ((outPath: string) => Promise<void>),
+    },
+    ...job.assets.map((asset) => {
+      const name = `${(asset.relPath.split("/").pop() ?? asset.relPath).replace(/\.[^.]+$/, "")}.png`;
+      return {
+        key: `sizes/${name}`,
+        name,
+        render: (outPath: string) => renderLosslessPrintFile(job, asset, outPath),
+      };
+    }),
   ];
 
   for (const target of targets) {
-    if (files[target.relPath]) continue; // already uploaded
+    if (files[target.key]) continue; // already uploaded
+
+    // Rendered into the job's own folder and removed once uploaded, so a
+    // finished poster is not left holding a second, lossless copy of every size.
+    const localPath = target.render
+      ? jobAsset(job.batchId, job.id, `drive-${target.name}`)
+      : jobAsset(job.batchId, job.id, target.key);
+
+    if (target.render) {
+      try {
+        await target.render(localPath);
+      } catch (cause) {
+        return err(
+          `Could not render ${target.name} for Drive: ${
+            cause instanceof Error ? cause.message : String(cause)
+          }`,
+        );
+      }
+    }
 
     const result = await uploadFile({
-      localPath: jobAsset(job.batchId, job.id, target.relPath),
+      localPath,
       name: target.name,
       parentId: folder.value,
-      mimeType: mimeFor(target.relPath),
+      mimeType: mimeFor(target.name),
     });
+    if (target.render) await rm(localPath, { force: true }).catch(() => undefined);
 
     if (!result.ok) {
       // Persist what did land before giving up, so a retry resumes rather
@@ -129,7 +171,7 @@ export async function uploadToDrive(job: PosterJob): Promise<Result<DriveRefs>> 
       return result;
     }
 
-    files[target.relPath] = result.value;
+    files[target.key] = result.value;
     await updateJob(job.batchId, job.id, (current) => ({
       ...current,
       drive: { folderId: folder.value, files },

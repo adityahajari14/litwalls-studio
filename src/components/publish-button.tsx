@@ -75,10 +75,21 @@ export function PublishButton({
           : `${body.published} published as ${body.status}`,
       );
       if (body.failed) setResult((prev) => `${prev}, ${body.failed} failed`);
+      if (body.driveFailed) {
+        setResult((prev) => `${prev}, ${body.driveFailed} not filed to Drive`);
+      }
       setErrors(
-        (body.results ?? [])
-          .filter((r: { ok: boolean }) => !r.ok)
-          .map((r: { job: string; detail: string }) => `${r.job}: ${r.detail}`),
+        (body.results ?? []).flatMap(
+          (r: {
+            ok: boolean;
+            job: string;
+            detail: string;
+            driveError?: string;
+          }) => [
+            ...(r.ok ? [] : [`${r.job}: ${r.detail}`]),
+            ...(r.driveError ? [`${r.job}: Drive — ${r.driveError}`] : []),
+          ],
+        ),
       );
       router.refresh();
     } catch (cause) {

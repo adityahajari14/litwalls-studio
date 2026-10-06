@@ -135,17 +135,6 @@ const PUBLISHABLE_PUBLISH = /* GraphQL */ `
   }
 `;
 
-/** The image sent to Shopify for each size. */
-function mediaFor(job: PosterJob, sizeId: SizeId) {
-  // For a split poster the first panel stands in for the set: Shopify shows
-  // one image per variant, and a lone middle panel would be baffling.
-  return (
-    job.assets.find((a) => a.sizeId === sizeId && a.panel === 1) ??
-    job.assets.find((a) => a.sizeId === sizeId) ??
-    null
-  );
-}
-
 /**
  * The product's image gallery, in display order.
  *
@@ -395,32 +384,23 @@ export async function publishJob(options: {
   );
 
   try {
-    // Staged in parallel: independent uploads that do not depend on each
-    // other, and doing them in sequence multiplies the wait for no benefit.
-    const staged = await Promise.all(
-      sizes.map(async (size) => {
-        const asset = mediaFor(job, size.id);
-        if (!asset) return null;
-        const alt = job.metadata?.altText || `${subject} — ${size.label}`;
-        return {
-          sizeId: size.id,
-          file: await stageImage(job, asset.relPath, `${alt} (${size.label})`),
-        };
-      }),
-    );
-
-    // The gallery: mockups first, then shared library images, then the plain
-    // artwork. Mockups lead because a poster on a wall sells better than a
-    // flat scan of it, and Shopify uses the first image as the thumbnail
-    // everywhere — collection cards, search, checkout.
+    // The gallery: mockups first, then shared library images. Mockups lead
+    // because a poster on a wall sells better than a flat scan of it, and
+    // Shopify uses the first image as the thumbnail everywhere — collection
+    // cards, search, checkout.
     //
-    // Until now this was omitted entirely and only the four per-variant
-    // images were sent, so every mockup the pipeline rendered was discarded
-    // at the last step.
+    // The print files for each size are NOT sent. They are the artwork the
+    // customer pays to have printed, not product photography: they go to
+    // Google Drive (see stages/drive.ts), and putting them on the storefront
+    // hands out the very files that are being sold.
     const gallery = await stageGallery(job, subject);
+    if (gallery.length === 0) {
+      console.warn(
+        `publish: "${subject}" has no gallery images, so the product will have none — render mockups or attach a library image.`,
+      );
+    }
 
     const variants = sizes.map((size) => {
-      const file = staged.find((s) => s?.sizeId === size.id)?.file;
       const price = prices[size.id];
       return {
         optionValues: [{ optionName: "Size", name: size.label }],
@@ -441,27 +421,13 @@ export async function publishJob(options: {
         // Print-on-demand never goes out of stock, so selling must not be
         // blocked by an inventory count nobody is maintaining.
         inventoryPolicy: "CONTINUE",
-        ...(file ? { file } : {}),
       };
     });
 
-    // Every file referenced by a variant must ALSO appear in the product's
-    // top-level `files`. Shopify rejects the mutation otherwise, with
-    // "File original source missing from the product files input" — the
-    // variant `file` field attaches an image to a variant, it does not add
-    // that image to the product.
-    //
-    // Gallery images come FIRST so images[0] — which Shopify uses as the
-    // product thumbnail — is a mockup rather than a bare A5 scan. The
-    // per-variant files follow, deduplicated by source: a file referenced
-    // twice makes Shopify reject the whole mutation.
+    // Deduplicated by source: a file listed twice makes Shopify reject the
+    // whole mutation, and the same library image can be attached twice.
     const seen = new Set<string>();
-    const files = [
-      ...gallery,
-      ...staged
-        .filter((entry): entry is NonNullable<typeof entry> => entry !== null)
-        .map((entry) => entry.file),
-    ]
+    const files = gallery
       .filter((file) => {
         if (seen.has(file.originalSource)) return false;
         seen.add(file.originalSource);

@@ -1,6 +1,7 @@
 import { listPublished } from "@/lib/pipeline/registry";
 import { readSettings } from "@/lib/pipeline/settings";
-import { listJobs, readBatch, updateJob } from "@/lib/pipeline/store";
+import { uploadToDrive } from "@/lib/pipeline/stages/drive";
+import { listJobs, readBatch, readJob, updateJob } from "@/lib/pipeline/store";
 import { hasReached } from "@/lib/print/types";
 import { Numberer } from "@/lib/shopify/numbering";
 import { publishJob } from "@/lib/shopify/publish";
@@ -91,7 +92,13 @@ export async function POST(
   }
 
   const settings = await readSettings();
-  const results: { job: string; ok: boolean; detail: string }[] = [];
+  const results: {
+    job: string;
+    ok: boolean;
+    detail: string;
+    /** Set when the product published but its print files did not reach Drive. */
+    driveError?: string;
+  }[] = [];
 
   // Sequential, deliberately: each publish claims a number from the shared
   // Numberer and stages four images. Running them in parallel would race on
@@ -118,7 +125,27 @@ export async function POST(
         stage: "published",
         status: { kind: "done" },
       }));
-      results.push({ job: job.sourceName, ok: true, detail: result.value.handle });
+
+      // The print files belong on Drive, not on the storefront, so filing
+      // them is part of publishing. Kept separate from the Shopify result: the
+      // product is live either way, and a Drive outage or an unconnected
+      // account must not report a published product as failed. Files already
+      // there are skipped, so a republish costs nothing here.
+      const filed = await uploadToDrive(
+        (await readJob(batchId, job.id)) ?? job,
+      );
+      if (filed.ok) {
+        await updateJob(batchId, job.id, (current) => ({
+          ...current,
+          drive: filed.value,
+        }));
+      }
+      results.push({
+        job: job.sourceName,
+        ok: true,
+        detail: result.value.handle,
+        ...(filed.ok ? {} : { driveError: filed.error }),
+      });
     } else {
       await updateJob(batchId, job.id, (current) => ({
         ...current,
@@ -136,6 +163,7 @@ export async function POST(
   return Response.json({
     published: results.filter((r) => r.ok).length,
     failed: results.filter((r) => !r.ok).length,
+    driveFailed: results.filter((r) => r.driveError).length,
     republish,
     status,
     results,
