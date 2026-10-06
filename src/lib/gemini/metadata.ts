@@ -63,6 +63,13 @@ type RawMetadata = {
   collections: string[];
 };
 
+/**
+ * Attempts per poster for the bulk regenerate buttons. A whole batch fired at
+ * once is exactly what trips Gemini's rate limit, and unlike a batch run
+ * nobody is blocked on one poster, so waiting out a 429 beats failing it.
+ */
+const BULK_ATTEMPTS = 5;
+
 /** Longest description paragraph accepted, in characters. */
 const MAX_DESCRIPTION = 600;
 
@@ -351,6 +358,7 @@ export async function regenerateTitle(options: {
     prompt,
     image: await prepareImage(options.image),
     schema: TITLE_SCHEMA as unknown as Record<string, unknown>,
+    maxAttempts: BULK_ATTEMPTS,
     parse: (value) => {
       const parsed = parse({ ...(value as object), tags: [], altText: "", description: "" });
       return parsed ? { subject: parsed.subject, subtitle: parsed.subtitle } : null;
@@ -400,6 +408,7 @@ export async function regenerateDescription(options: {
     prompt,
     image: await prepareImage(options.image),
     schema: DESCRIPTION_SCHEMA as unknown as Record<string, unknown>,
+    maxAttempts: BULK_ATTEMPTS,
     parse: (value) => {
       const text = (value as { description?: unknown } | null)?.description;
       if (typeof text !== "string") return null;

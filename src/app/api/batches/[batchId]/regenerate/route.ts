@@ -21,8 +21,13 @@ import type { PosterJob } from "@/lib/print/types";
  * already edited is not suddenly relabelled as the model's work.
  */
 
-/** Gentle on rate limits — see `reframeSizes` in the analyze stage. */
-const CONCURRENCY = 2;
+/**
+ * One poster at a time. Two at once was enough to hit Gemini's per-minute
+ * limit on a batch of fifty (10 of 53 came back 429), and a rate-limited
+ * request waits and retries inside askGemini — which only helps if the other
+ * requests are not still hammering it.
+ */
+const CONCURRENCY = 1;
 
 type Outcome = "updated" | "skipped" | "failed";
 

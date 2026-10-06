@@ -60,6 +60,12 @@ export type AskOptions<T> = {
   /** Called with the parsed reply; return null to reject a malformed shape. */
   parse: (value: unknown) => T | null;
   signal?: AbortSignal;
+  /**
+   * How many times to try before giving up. Defaults to 2 — one retry — which
+   * is right while a human is watching a batch run. A bulk job that can simply
+   * wait out a rate limit (regenerating a whole batch's text) asks for more.
+   */
+  maxAttempts?: number;
 };
 
 /**
@@ -112,8 +118,12 @@ export async function askGemini<T>(options: AskOptions<T>): Promise<Result<T>> {
     response_format: options.schema,
   });
 
-  for (let attempt = 0; attempt < 2; attempt++) {
-    if (attempt > 0) await sleep(2000);
+  const maxAttempts = options.maxAttempts ?? 2;
+  let waitMs = 2000;
+
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    if (attempt > 0) await sleep(waitMs);
+    const lastAttempt = attempt === maxAttempts - 1;
 
     let response: Response;
     try {
@@ -128,14 +138,26 @@ export async function askGemini<T>(options: AskOptions<T>): Promise<Result<T>> {
         cache: "no-store",
       });
     } catch (cause) {
-      if (attempt === 0) continue;
+      if (!lastAttempt) continue;
       return err(
         `Gemini request failed: ${cause instanceof Error ? cause.message : String(cause)}`,
       );
     }
 
     if (response.status === 429 || response.status >= 500) {
-      if (attempt === 0) continue;
+      if (!lastAttempt) {
+        // Honour the server's own Retry-After when it sends one; otherwise
+        // back off exponentially, capped so one stubborn poster cannot stall
+        // a run for minutes.
+        const retryAfter = Number(response.headers.get("retry-after"));
+        waitMs = Math.min(
+          Number.isFinite(retryAfter) && retryAfter > 0
+            ? retryAfter * 1000
+            : 2000 * 2 ** (attempt + 1),
+          30_000,
+        );
+        continue;
+      }
       return err(`Gemini returned ${response.status} ${response.statusText}`);
     }
 
@@ -172,7 +194,7 @@ export async function askGemini<T>(options: AskOptions<T>): Promise<Result<T>> {
     return ok(value);
   }
 
-  return err("Gemini request failed after a retry");
+  return err(`Gemini request failed after ${maxAttempts} attempts`);
 }
 
 /**
