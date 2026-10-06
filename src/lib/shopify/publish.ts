@@ -17,7 +17,11 @@ import {
   seoTitleFor,
   skuFor,
 } from "@/lib/print/identity";
-import { listPublished, recordPublished } from "@/lib/pipeline/registry";
+import {
+  forgetPublished,
+  listPublished,
+  recordPublished,
+} from "@/lib/pipeline/registry";
 import { categoriesFor } from "@/lib/print/categories";
 import { productOrientation } from "@/lib/print/orientation";
 import { requiredTagsFor, withRequiredTags } from "@/lib/print/tags";
@@ -78,6 +82,14 @@ const PRODUCT_SET = /* GraphQL */ `
         message
         code
       }
+    }
+  }
+`;
+
+const PRODUCT_EXISTS = /* GraphQL */ `
+  query ProductExists($id: ID!) {
+    product(id: $id) {
+      id
     }
   }
 `;
@@ -254,6 +266,18 @@ async function joinManualCollections(
 }
 
 /** The number an already-published poster's title carries, if it can be found. */
+/**
+ * Whether Shopify still has this product. A product deleted in the admin
+ * leaves its id behind in the job, and `productSet` with a dead id fails with
+ * "input.id: Product does not exist" instead of creating anything.
+ */
+async function productExists(id: string): Promise<boolean> {
+  const data = await admin<{ product: { id: string } | null }>(PRODUCT_EXISTS, {
+    id,
+  });
+  return data.product !== null;
+}
+
 async function existingSequence(job: PosterJob): Promise<number | null> {
   if (job.shopify?.sequence) return job.shopify.sequence;
   const record = (await listPublished()).find(
@@ -311,10 +335,33 @@ export async function publishJob(options: {
   // this very product, so claiming again would hand out the NEXT number and
   // rename a live product. Products published before the number was recorded
   // are recovered from the title the registry kept.
-  const sequence =
-    (job.shopify?.productId ? await existingSequence(job) : null) ??
-    job.metadata?.sequence ??
-    numberer.claim(subject);
+  //
+  // If the product has been deleted in Shopify since, there is nothing to
+  // update: it is created again as a new product, taking its old number back
+  // when nothing else has used it meanwhile.
+  let productId = job.shopify?.productId ?? null;
+  let deletedProductId: string | null = null;
+  if (productId) {
+    try {
+      if (!(await productExists(productId))) {
+        deletedProductId = productId;
+        productId = null;
+      }
+    } catch (cause) {
+      return err(
+        `Could not check whether the Shopify product still exists: ${
+          cause instanceof Error ? cause.message : String(cause)
+        }`,
+      );
+    }
+  }
+
+  const previousSequence = job.shopify ? await existingSequence(job) : null;
+  const sequence = productId
+    ? (previousSequence ?? job.metadata?.sequence ?? numberer.claim(subject))
+    : previousSequence !== null && numberer.reserve(subject, previousSequence)
+      ? previousSequence
+      : (job.metadata?.sequence ?? numberer.claim(subject));
   const title = formatTitle(
     {
       subject,
@@ -442,7 +489,7 @@ export async function publishJob(options: {
       input: {
         // An existing id makes this an update rather than a create, which is
         // what keeps a retry from producing a second product.
-        ...(job.shopify?.productId ? { id: job.shopify.productId } : {}),
+        ...(productId ? { id: productId } : {}),
         title,
         descriptionHtml: descriptionFor(
           subject,
@@ -533,6 +580,13 @@ export async function publishJob(options: {
       console.warn(
         "publish: no sales channels found — the product will not appear on the storefront.",
       );
+    }
+
+    // The deleted product's registry entry would otherwise sit beside the new
+    // one, listing a product that no longer exists and still matching
+    // duplicate checks against it.
+    if (deletedProductId && deletedProductId !== product.id) {
+      await forgetPublished(deletedProductId).catch(() => undefined);
     }
 
     // Recorded OUTSIDE the batch, so duplicate detection still recognises this

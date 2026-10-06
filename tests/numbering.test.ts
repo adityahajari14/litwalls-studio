@@ -30,6 +30,16 @@ test("claiming twice yields consecutive numbers, not the same one twice", () => 
   );
 });
 
+test("reserve takes a specific number only if it is free", () => {
+  const numberer = Numberer.fromTitles(LIVE_TITLES);
+  // Spider Man tops out at #05, so #06 is free and #05 is not.
+  assert.equal(numberer.reserve("Spider Man", 5), false);
+  assert.equal(numberer.reserve("Spider Man", 6), true);
+  assert.equal(numberer.reserve("Spider Man", 6), false);
+  // The next claim steps past what was reserved.
+  assert.equal(numberer.claim("Spider Man"), 7);
+});
+
 test("peek does not consume a number", () => {
   const numberer = Numberer.fromTitles(LIVE_TITLES);
   assert.equal(numberer.peek("Spider Man"), 6);

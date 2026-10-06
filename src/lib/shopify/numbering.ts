@@ -122,6 +122,21 @@ export class Numberer {
     return next;
   }
 
+  /**
+   * Claim one SPECIFIC number, if nobody holds it.
+   *
+   * For re-creating a product whose Shopify copy was deleted: it can take its
+   * old number back, provided nothing else has used it in the meantime.
+   * Returns false, claiming nothing, when the number is taken.
+   */
+  reserve(subject: string, sequence: number): boolean {
+    const key = subjectKey(subject);
+    const existing = this.used.get(key) ?? [];
+    if (existing.includes(sequence)) return false;
+    this.used.set(key, [...existing, sequence]);
+    return true;
+  }
+
   /** What `claim` would return, without consuming it. For previews. */
   peek(subject: string): number {
     return nextSequence(this.used.get(subjectKey(subject)) ?? []);
