@@ -48,6 +48,23 @@ export function printOrientation(
   return job.probe ? orientationOf(job.probe) : "portrait";
 }
 
+/** True when the job's mockup rotation is a quarter turn either way. */
+function isTurned(job: Pick<PosterJob, "kind" | "mockupRotation">): boolean {
+  if (job.kind === "split3") return false;
+  return job.mockupRotation === 90 || job.mockupRotation === 270;
+}
+
+/**
+ * The orientation the poster HANGS in a mockup: the print files' orientation,
+ * turned when a human has rotated artwork that was supplied on its side.
+ */
+export function mockupOrientation(
+  job: Pick<PosterJob, "kind" | "probe" | "mockupRotation">,
+): Orientation {
+  const printed = printOrientation(job);
+  return isTurned(job) ? flipOrientation(printed) : printed;
+}
+
 /**
  * The orientation of the finished PRODUCT — what the customer hangs on a
  * wall, and what the orientation tag and badge report.
@@ -58,10 +75,12 @@ export function printOrientation(
  * artwork exactly the wrong thing.
  */
 export function productOrientation(
-  job: Pick<PosterJob, "kind" | "probe">,
+  job: Pick<PosterJob, "kind" | "probe" | "mockupRotation">,
 ): Orientation {
   if (job.kind === "split3") return "landscape";
-  return job.probe ? orientationOf(job.probe) : "portrait";
+  // A sideways artwork hangs the way the mockup shows it, not the way its
+  // file happens to be stored.
+  return mockupOrientation(job);
 }
 
 /** Same question, for a bare probe result and kind — for callers that have

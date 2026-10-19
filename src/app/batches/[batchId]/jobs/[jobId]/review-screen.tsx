@@ -32,6 +32,7 @@ import type { PartialPriceTable, PriceTable as Prices } from "@/lib/print/pricin
 import type {
   Batch,
   Category,
+  MockupRotation,
   NormRect,
   PosterJob,
   ProductImageRef,
@@ -117,9 +118,17 @@ export function ReviewScreen({
     };
   }, []);
 
+  /**
+   * Bumped after every re-render. A re-render rewrites the files at the SAME
+   * paths, so without this the <img> src never changes and the browser keeps
+   * showing the old mockups — which looks exactly like the change did nothing.
+   */
+  const [renderVersion, setRenderVersion] = useState(0);
+
   const assetUrl = useCallback(
-    (relPath: string) => `/api/assets/${job.batchId}/${job.id}/${relPath}`,
-    [job.batchId, job.id],
+    (relPath: string) =>
+      `/api/assets/${job.batchId}/${job.id}/${relPath}?v=${renderVersion}`,
+    [job.batchId, job.id, renderVersion],
   );
 
   const source = job.probe
@@ -191,7 +200,23 @@ export function ReviewScreen({
     // Saved first: re-render reads the job from disk, so unsaved crop changes
     // would otherwise be silently ignored.
     if (!(await patch(body(), "rerender"))) return;
+    await renderAgain();
+  }
 
+  /**
+   * Turn the poster in its mockups, for artwork supplied on its side. Saves
+   * and re-renders straight away — the mockups on screen are the whole point
+   * of the control, and leaving the old ones up would look like it did nothing.
+   */
+  async function rotateMockups(rotation: MockupRotation) {
+    if (busy !== null || rotation === (job.mockupRotation ?? 0)) return;
+    if (!(await patch({ ...body(), mockupRotation: rotation }, "rerender"))) {
+      return;
+    }
+    await renderAgain();
+  }
+
+  async function renderAgain() {
     setBusy("rerender");
     try {
       const response = await fetch(
@@ -202,6 +227,7 @@ export function ReviewScreen({
       if (!response.ok) setMessage(result.error ?? "Re-render failed.");
       else {
         setJob(result.job);
+        setRenderVersion((v) => v + 1);
         setMessage("Re-rendered");
       }
     } finally {
@@ -480,7 +506,30 @@ export function ReviewScreen({
           </Section>
 
           {job.mockups.length > 0 ? (
-            <Section title="Mockups">
+            <Section
+              title="Mockups"
+              action={
+                // Split sets hang as three upright sheets; nothing to turn.
+                job.kind !== "split3" ? (
+                  <span className="flex items-center gap-2">
+                    <span className="text-xs text-ink-400">Rotate poster</span>
+                    <Segmented<`${MockupRotation}`>
+                      size="sm"
+                      value={`${job.mockupRotation ?? 0}`}
+                      onChange={(value) =>
+                        void rotateMockups(Number(value) as MockupRotation)
+                      }
+                      options={[
+                        { value: "0", label: "0°" },
+                        { value: "90", label: "↻ 90°" },
+                        { value: "180", label: "180°" },
+                        { value: "270", label: "↺ 90°" },
+                      ]}
+                    />
+                  </span>
+                ) : null
+              }
+            >
               <div className="grid grid-cols-2 gap-3">
                 {job.mockups.map((mockup) => (
                   <Card key={mockup.templateId} className="overflow-hidden">

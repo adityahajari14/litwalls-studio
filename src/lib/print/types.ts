@@ -18,6 +18,11 @@ export type Pt = { x: number; y: number };
  */
 export type PosterKind = "normal" | "split3";
 
+/** Clockwise quarter turns, in degrees. See `PosterJob.mockupRotation`. */
+export type MockupRotation = 0 | 90 | 180 | 270;
+
+export const MOCKUP_ROTATIONS: readonly MockupRotation[] = [0, 90, 180, 270];
+
 /**
  * A collection handle. Was a closed union of four, which meant adding a
  * category was a code change; it is now whatever Shopify reports.
@@ -298,6 +303,13 @@ export type PosterJob = {
   /** Defaulted from the batch but overridable: a batch is usually all one kind,
    *  but not always. */
   kind: PosterKind;
+  /**
+   * Degrees clockwise to turn the poster when placing it in a mockup, for
+   * artwork supplied on its side — a landscape design saved as a portrait
+   * file. Mockups only: the print files stay as supplied, since a sheet
+   * printed sideways is the same sheet. Absent means 0. Single sheets only.
+   */
+  mockupRotation?: MockupRotation;
   /** The highest stage completed. Everything at or before it is done. */
   stage: JobStage;
   status: JobStatus;
