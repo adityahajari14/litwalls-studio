@@ -12,11 +12,7 @@ import {
   validCompareAt,
 } from "@/lib/print/pricing";
 import { SIZES, sizeIdsFor, sizesFor } from "@/lib/print/sizes";
-import {
-  seoDescriptionFor,
-  seoTitleFor,
-  skuFor,
-} from "@/lib/print/identity";
+import { seoDescriptionFor, seoTitleFor, skuFor } from "@/lib/print/identity";
 import {
   forgetPublished,
   listPublished,
@@ -260,6 +256,51 @@ async function joinManualCollections(
  * leaves its id behind in the job, and `productSet` with a dead id fails with
  * "input.id: Product does not exist" instead of creating anything.
  */
+/**
+ * A product with exactly this title created since `since`, that no poster has
+ * recorded — i.e. the one a create whose answer never arrived made. Asked a
+ * few times because Shopify's product search lags a create by a few seconds.
+ */
+async function findJustCreated(
+  title: string,
+  since: number,
+): Promise<string | null> {
+  const known = new Set(
+    (await listPublished()).map((entry) => entry.productId),
+  );
+  const after = new Date(since - 60_000).toISOString();
+  for (const wait of [3000, 6000, 10000]) {
+    await new Promise((resolve) => setTimeout(resolve, wait));
+    try {
+      const data = await admin<{
+        products: { nodes: { id: string; title: string; createdAt: string }[] };
+      }>(JUST_CREATED, {
+        query: `title:${JSON.stringify(title)} created_at:>'${after}'`,
+      });
+      const match = data.products.nodes.filter(
+        (node) => node.title === title && !known.has(node.id),
+      );
+      if (match.length === 1) return match[0].id;
+      if (match.length > 1) return null; // ambiguous: leave it to a human
+    } catch {
+      // Still unreachable; try again, then give up.
+    }
+  }
+  return null;
+}
+
+const JUST_CREATED = /* GraphQL */ `
+  query JustCreated($query: String!) {
+    products(first: 5, query: $query, sortKey: CREATED_AT, reverse: true) {
+      nodes {
+        id
+        title
+        createdAt
+      }
+    }
+  }
+`;
+
 async function productExists(id: string): Promise<boolean> {
   const data = await admin<{ product: { id: string } | null }>(PRODUCT_EXISTS, {
     id,
@@ -330,6 +371,25 @@ export async function publishJob(options: {
   // when nothing else has used it meanwhile.
   let productId = job.shopify?.productId ?? null;
   let deletedProductId: string | null = null;
+
+  // A product this very poster already created, that the job never heard
+  // about: the server stopped, or the connection dropped, between Shopify
+  // creating it and the job being saved. The registry is written straight
+  // after the create, so it knows. Update that product rather than creating a
+  // second copy of it on the storefront.
+  let adopted: { productId: string; title: string } | null = null;
+  if (!productId) {
+    const mine = (await listPublished())
+      .filter(
+        (entry) => entry.batchId === job.batchId && entry.jobId === job.id,
+      )
+      .sort((a, b) => b.publishedAt - a.publishedAt)[0];
+    if (mine) {
+      adopted = { productId: mine.productId, title: mine.title };
+      productId = mine.productId;
+    }
+  }
+
   if (productId) {
     try {
       if (!(await productExists(productId))) {
@@ -345,7 +405,11 @@ export async function publishJob(options: {
     }
   }
 
-  const previousSequence = job.shopify ? await existingSequence(job) : null;
+  const previousSequence = job.shopify
+    ? await existingSequence(job)
+    : adopted
+      ? (parseTitle(adopted.title)?.sequence ?? null)
+      : null;
   const sequence = productId
     ? (previousSequence ?? job.metadata?.sequence ?? numberer.claim(subject))
     : previousSequence !== null && numberer.reserve(subject, previousSequence)
@@ -435,7 +499,7 @@ export async function publishJob(options: {
       })
       .map((file) => ({ ...file, contentType: "IMAGE" as const }));
 
-    const data = await admin<{
+    type ProductSetData = {
       productSet: {
         product: {
           id: string;
@@ -448,55 +512,82 @@ export async function publishJob(options: {
             }[];
           };
         } | null;
-        userErrors: { field: string[] | null; message: string; code?: string }[];
+        userErrors: {
+          field: string[] | null;
+          message: string;
+          code?: string;
+        }[];
       };
-    }>(PRODUCT_SET, {
-      synchronous: true,
-      input: {
-        // An existing id makes this an update rather than a create, which is
-        // what keeps a retry from producing a second product.
-        ...(productId ? { id: productId } : {}),
-        title,
-        descriptionHtml: descriptionFor(
-          subject,
-          stripOfficial(job.metadata?.description ?? ""),
-          options.descriptionTemplate,
-        ),
-        vendor: "Litwalls",
-        status: options.status ?? "ACTIVE",
-        // Every structural tag is guaranteed here rather than trusted to the
-        // model or the human: this store's collections are smart collections
-        // keyed on tags, so a missing tag means a product that is live and
-        // appears nowhere. That now covers EVERY collection the poster is
-        // filed into, not just the main one, plus the orientation and format
-        // tags a shopper filters on.
-        tags: withRequiredTags(
-          job.metadata?.tags ?? [],
-          requiredTagsFor({
-            categories,
-            orientation: productOrientation(job),
-            kind: job.kind,
-          }),
-        ),
-        // Every hand-made product in the catalogue carries an SEO description
-        // and Studio was publishing none — making its products strictly worse
-        // in search than the ones done by hand. The title is written rather
-        // than defaulted: Shopify would otherwise use "Spider Man #06 | Marvel
-        // Posters", where the "#06" is meaningless to a shopper.
-        seo: {
-          title: seoTitleFor({ subject, category }),
-          description: seoDescriptionFor(subject, job.kind),
-        },
-        productOptions: [
-          {
-            name: "Size",
-            values: sizes.map((size) => ({ name: size.label })),
+    };
+    const send = (id: string | null) =>
+      admin<ProductSetData>(
+        PRODUCT_SET,
+        {
+          synchronous: true,
+          input: {
+            // An existing id makes this an update rather than a create, which is
+            // what keeps a retry from producing a second product.
+            ...(id ? { id } : {}),
+            title,
+            descriptionHtml: descriptionFor(
+              subject,
+              stripOfficial(job.metadata?.description ?? ""),
+              options.descriptionTemplate,
+            ),
+            vendor: "Litwalls",
+            status: options.status ?? "ACTIVE",
+            // Every structural tag is guaranteed here rather than trusted to the
+            // model or the human: this store's collections are smart collections
+            // keyed on tags, so a missing tag means a product that is live and
+            // appears nowhere. That now covers EVERY collection the poster is
+            // filed into, not just the main one, plus the orientation and format
+            // tags a shopper filters on.
+            tags: withRequiredTags(
+              job.metadata?.tags ?? [],
+              requiredTagsFor({
+                categories,
+                orientation: productOrientation(job),
+                kind: job.kind,
+              }),
+            ),
+            // Every hand-made product in the catalogue carries an SEO description
+            // and Studio was publishing none — making its products strictly worse
+            // in search than the ones done by hand. The title is written rather
+            // than defaulted: Shopify would otherwise use "Spider Man #06 | Marvel
+            // Posters", where the "#06" is meaningless to a shopper.
+            seo: {
+              title: seoTitleFor({ subject, category }),
+              description: seoDescriptionFor(subject, job.kind),
+            },
+            productOptions: [
+              {
+                name: "Size",
+                values: sizes.map((size) => ({ name: size.label })),
+              },
+            ],
+            files,
+            variants,
           },
-        ],
-        files,
-        variants,
-      },
-    });
+        },
+        // Creating is not safe to repeat: if Shopify made the product and only
+        // the answer was lost, a retry makes a second one. An update (an id is
+        // passed) converges on the same product however often it is sent.
+        { idempotent: Boolean(id) },
+      );
+
+    let data: ProductSetData;
+    const sentAt = Date.now();
+    try {
+      data = await send(productId);
+    } catch (cause) {
+      if (productId) throw cause;
+      // The create may have gone through with only the answer lost. Look for
+      // it before reporting a failure, so the next publish does not make a
+      // second one beside it.
+      const made = await findJustCreated(title, sentAt);
+      if (!made) throw cause;
+      data = await send(made);
+    }
 
     const { product, userErrors } = data.productSet;
     if (userErrors.length) {

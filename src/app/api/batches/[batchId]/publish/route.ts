@@ -1,10 +1,30 @@
 import { enqueueDrive } from "@/lib/drive/queue";
 import { listPublished } from "@/lib/pipeline/registry";
 import { readSettings } from "@/lib/pipeline/settings";
-import { listJobs, readBatch, updateJob } from "@/lib/pipeline/store";
+import { listJobs, readBatch, readJob, updateJob } from "@/lib/pipeline/store";
 import { hasReached } from "@/lib/print/types";
 import { Numberer } from "@/lib/shopify/numbering";
 import { publishJob } from "@/lib/shopify/publish";
+import {
+  claimJob,
+  currentRun,
+  finishRun,
+  releaseJob,
+  saveProgress,
+  startRun,
+  type PublishRun,
+} from "@/lib/shopify/publish-runs";
+
+/** Whether this batch is being published right now, and how far along. The
+ *  button asks on load, so a page reloaded mid-run shows the run rather than
+ *  offering to start a second one. */
+export async function GET(
+  _request: Request,
+  ctx: RouteContext<"/api/batches/[batchId]/publish">,
+) {
+  const { batchId } = await ctx.params;
+  return Response.json({ running: await currentRun(batchId) });
+}
 
 /**
  * Publish every approved poster in a batch to Shopify.
@@ -45,12 +65,55 @@ export async function POST(
     republish = body.republish === true;
     drive = body.drive !== false;
     if (Array.isArray(body.jobIds)) {
-      onlyJobIds = body.jobIds.filter((id): id is string => typeof id === "string");
+      onlyJobIds = body.jobIds.filter(
+        (id): id is string => typeof id === "string",
+      );
     }
   } catch {
     // No body: keep the safer default.
   }
 
+  // One run per batch. Without this, reloading the page mid-publish brought
+  // the button back, and a second click published every remaining poster a
+  // second time.
+  const claim = await startRun(batchId, republish ? "republish" : "publish");
+  if (!claim.ok) {
+    const { running } = claim;
+    return Response.json(
+      {
+        error:
+          `This batch is already ${running.mode === "republish" ? "republishing" : "publishing"} ` +
+          `(${running.done + running.failed} of ${running.total} done). ` +
+          "Wait for it to finish — it keeps going even if the page is closed.",
+        running,
+      },
+      { status: 409 },
+    );
+  }
+  try {
+    return await publishBatch(
+      batchId,
+      batch,
+      { status, republish, onlyJobIds, drive },
+      claim.run,
+    );
+  } finally {
+    await finishRun(batchId);
+  }
+}
+
+async function publishBatch(
+  batchId: string,
+  batch: NonNullable<Awaited<ReturnType<typeof readBatch>>>,
+  options: {
+    status: "ACTIVE" | "DRAFT";
+    republish: boolean;
+    onlyJobIds: string[] | null;
+    drive: boolean;
+  },
+  run: PublishRun,
+): Promise<Response> {
+  const { status, republish, onlyJobIds, drive } = options;
   const jobs = await listJobs(batchId);
   // A republish re-sends posters that already have a Shopify product, updating
   // it in place (publishJob passes the existing product id). The normal run
@@ -61,6 +124,9 @@ export async function POST(
       Boolean(job.shopify?.productId) === republish &&
       (onlyJobIds === null || onlyJobIds.includes(job.id)),
   );
+
+  run.total = ready.length;
+  await saveProgress(batchId, run);
 
   if (ready.length === 0) {
     return Response.json({
@@ -103,53 +169,90 @@ export async function POST(
   // Sequential, deliberately: each publish claims a number from the shared
   // Numberer and stages four images. Running them in parallel would race on
   // numbering for no meaningful speed-up.
-  for (const job of ready) {
-    const result = await publishJob({
-      job,
-      batch,
-      settingsPrices: settings.prices,
-      settingsCompareAt: settings.compareAt,
-      settingsSplitPrices: settings.splitPrices,
-      settingsSplitCompareAt: settings.splitCompareAt,
-      descriptionTemplate: settings.descriptionTemplate,
-      numberer,
-      status: republish
-        ? (currentStatus.get(job.shopify!.productId) ?? "DRAFT")
-        : status,
-    });
+  for (const listed of ready) {
+    // Read again right before sending: the list above is minutes old by the
+    // time a poster near the end is reached, and anything that published this
+    // poster meanwhile must not be repeated.
+    const job = (await readJob(batchId, listed.id)) ?? listed;
+    if (!republish && job.shopify?.productId) {
+      run.done += 1;
+      results.push({
+        job: job.sourceName,
+        ok: true,
+        detail: job.shopify.handle,
+      });
+      continue;
+    }
+    if (!claimJob(batchId, job.id)) {
+      run.failed += 1;
+      results.push({
+        job: job.sourceName,
+        ok: false,
+        detail: "Already being published by another run — skipped.",
+      });
+      continue;
+    }
+    run.current = job.metadata?.subject ?? job.sourceName;
+    await saveProgress(batchId, run);
 
-    if (result.ok) {
-      await updateJob(batchId, job.id, (current) => ({
-        ...current,
-        shopify: result.value,
-        stage: "published",
-        status: { kind: "done" },
-      }));
+    try {
+      const result = await publishJob({
+        job,
+        batch,
+        settingsPrices: settings.prices,
+        settingsCompareAt: settings.compareAt,
+        settingsSplitPrices: settings.splitPrices,
+        settingsSplitCompareAt: settings.splitCompareAt,
+        descriptionTemplate: settings.descriptionTemplate,
+        numberer,
+        status: republish
+          ? (currentStatus.get(job.shopify!.productId) ?? "DRAFT")
+          : status,
+      });
 
-      // The print files belong on Drive, so filing them is part of
-      // publishing — but it is QUEUED, not done here. Run inline, one restart
-      // or closed tab mid-run left a Drive folder with nothing in it and no
-      // record of why. The queue saves "needs filing" on the job first, files
-      // in the background, retries failures, and resumes after a restart.
-      // Queued as each product lands, so Drive starts while Shopify continues.
-      if (drive) {
-        toFile.push({ batchId, jobId: job.id });
-        await enqueueDrive([{ batchId, jobId: job.id }]);
-      }
-      results.push({ job: job.sourceName, ok: true, detail: result.value.handle });
-    } else {
-      await updateJob(batchId, job.id, (current) => ({
-        ...current,
-        status: {
-          kind: "failed",
+      if (result.ok) {
+        await updateJob(batchId, job.id, (current) => ({
+          ...current,
+          shopify: result.value,
           stage: "published",
-          message: result.error,
-          at: Date.now(),
-        },
-      }));
-      results.push({ job: job.sourceName, ok: false, detail: result.error });
+          status: { kind: "done" },
+        }));
+
+        // The print files belong on Drive, so filing them is part of
+        // publishing — but it is QUEUED, not done here. Run inline, one restart
+        // or closed tab mid-run left a Drive folder with nothing in it and no
+        // record of why. The queue saves "needs filing" on the job first, files
+        // in the background, retries failures, and resumes after a restart.
+        // Queued as each product lands, so Drive starts while Shopify continues.
+        if (drive) {
+          toFile.push({ batchId, jobId: job.id });
+          await enqueueDrive([{ batchId, jobId: job.id }]);
+        }
+        results.push({
+          job: job.sourceName,
+          ok: true,
+          detail: result.value.handle,
+        });
+      } else {
+        await updateJob(batchId, job.id, (current) => ({
+          ...current,
+          status: {
+            kind: "failed",
+            stage: "published",
+            message: result.error,
+            at: Date.now(),
+          },
+        }));
+        results.push({ job: job.sourceName, ok: false, detail: result.error });
+      }
+      if (result.ok) run.done += 1;
+      else run.failed += 1;
+    } finally {
+      releaseJob(batchId, job.id);
+      await saveProgress(batchId, run);
     }
   }
+  run.current = null;
 
   return Response.json({
     published: results.filter((r) => r.ok).length,
