@@ -111,14 +111,18 @@ export async function addWhiteBorder(
   if (mm <= 0) return sharp(source).toBuffer();
 
   const metadata = await sharp(source).metadata();
-  if (!metadata.width) return sharp(source).toBuffer();
+  if (!metadata.width || !metadata.height) return sharp(source).toBuffer();
 
   // At least 1px: below that the border rounds away and the setting appears
   // to do nothing, which reads as a bug rather than as a subtle border.
+  // Measured on the SHORT edge, which is what `widthMm` is — a landscape or
+  // rotated sheet has its long edge as its width.
   const size = printSize(sizeId);
   const border = Math.max(
     1,
-    Math.round((mm / size.widthMm) * metadata.width),
+    Math.round(
+      (mm / size.widthMm) * Math.min(metadata.width, metadata.height),
+    ),
   );
 
   return sharp(source)

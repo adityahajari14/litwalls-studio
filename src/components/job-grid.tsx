@@ -7,7 +7,7 @@ import { useMemo, useState, type CSSProperties } from "react";
 import { BulkEditor } from "@/components/bulk-editor";
 import { Badge, Button, Empty } from "@/components/ui";
 import { useBatchStream } from "@/components/use-batch-stream";
-import { COVERAGE_WARN, type PosterJob } from "@/lib/print/types";
+import { COVERAGE_WARN, driveFiled, type PosterJob } from "@/lib/print/types";
 
 /**
  * The batch's posters as a thumbnail grid.
@@ -301,7 +301,17 @@ function JobCard({
                 low-res
               </Badge>
             ) : null}
-            {job.drive ? <Badge tone="neutral">drive</Badge> : null}
+            {driveFiled(job) ? (
+              <Badge tone="neutral">drive</Badge>
+            ) : job.drivePending ? (
+              <Badge tone="neutral" title={job.driveError?.message ?? "Waiting to upload"}>
+                {job.driveError ? "drive · retrying" : "drive · queued"}
+              </Badge>
+            ) : job.driveError ? (
+              <Badge tone="danger" title={job.driveError.message}>
+                not on Drive
+              </Badge>
+            ) : null}
           </div>
         </div>
       </div>

@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { DriveQueuePanel } from "@/components/drive-queue-panel";
 import { DriveStatus } from "@/components/drive-status";
 import {
   Badge,
@@ -69,8 +70,9 @@ export default async function Home({
         </Card>
       ) : null}
 
-      <div className="mt-6">
+      <div className="mt-6 space-y-3">
         <DriveStatus />
+        <DriveQueuePanel />
       </div>
 
       <Section title="All batches" className="mt-8">

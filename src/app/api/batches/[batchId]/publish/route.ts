@@ -1,7 +1,7 @@
+import { enqueueDrive } from "@/lib/drive/queue";
 import { listPublished } from "@/lib/pipeline/registry";
 import { readSettings } from "@/lib/pipeline/settings";
-import { uploadToDrive } from "@/lib/pipeline/stages/drive";
-import { listJobs, readBatch, readJob, updateJob } from "@/lib/pipeline/store";
+import { listJobs, readBatch, updateJob } from "@/lib/pipeline/store";
 import { hasReached } from "@/lib/print/types";
 import { Numberer } from "@/lib/shopify/numbering";
 import { publishJob } from "@/lib/shopify/publish";
@@ -31,14 +31,19 @@ export async function POST(
   let status: "ACTIVE" | "DRAFT" = "DRAFT";
   let republish = false;
   let onlyJobIds: string[] | null = null;
+  // Filing to Drive is on unless the request explicitly turns it off — every
+  // poster on the storefront should have its print files on Drive.
+  let drive = true;
   try {
     const body = (await request.json()) as {
       status?: string;
       republish?: boolean;
       jobIds?: unknown;
+      drive?: boolean;
     };
     if (body.status === "ACTIVE") status = "ACTIVE";
     republish = body.republish === true;
+    drive = body.drive !== false;
     if (Array.isArray(body.jobIds)) {
       onlyJobIds = body.jobIds.filter((id): id is string => typeof id === "string");
     }
@@ -92,13 +97,8 @@ export async function POST(
   }
 
   const settings = await readSettings();
-  const results: {
-    job: string;
-    ok: boolean;
-    detail: string;
-    /** Set when the product published but its print files did not reach Drive. */
-    driveError?: string;
-  }[] = [];
+  const results: { job: string; ok: boolean; detail: string }[] = [];
+  const toFile: { batchId: string; jobId: string }[] = [];
 
   // Sequential, deliberately: each publish claims a number from the shared
   // Numberer and stages four images. Running them in parallel would race on
@@ -126,26 +126,17 @@ export async function POST(
         status: { kind: "done" },
       }));
 
-      // The print files belong on Drive, not on the storefront, so filing
-      // them is part of publishing. Kept separate from the Shopify result: the
-      // product is live either way, and a Drive outage or an unconnected
-      // account must not report a published product as failed. Files already
-      // there are skipped, so a republish costs nothing here.
-      const filed = await uploadToDrive(
-        (await readJob(batchId, job.id)) ?? job,
-      );
-      if (filed.ok) {
-        await updateJob(batchId, job.id, (current) => ({
-          ...current,
-          drive: filed.value,
-        }));
+      // The print files belong on Drive, so filing them is part of
+      // publishing — but it is QUEUED, not done here. Run inline, one restart
+      // or closed tab mid-run left a Drive folder with nothing in it and no
+      // record of why. The queue saves "needs filing" on the job first, files
+      // in the background, retries failures, and resumes after a restart.
+      // Queued as each product lands, so Drive starts while Shopify continues.
+      if (drive) {
+        toFile.push({ batchId, jobId: job.id });
+        await enqueueDrive([{ batchId, jobId: job.id }]);
       }
-      results.push({
-        job: job.sourceName,
-        ok: true,
-        detail: result.value.handle,
-        ...(filed.ok ? {} : { driveError: filed.error }),
-      });
+      results.push({ job: job.sourceName, ok: true, detail: result.value.handle });
     } else {
       await updateJob(batchId, job.id, (current) => ({
         ...current,
@@ -163,7 +154,7 @@ export async function POST(
   return Response.json({
     published: results.filter((r) => r.ok).length,
     failed: results.filter((r) => !r.ok).length,
-    driveFailed: results.filter((r) => r.driveError).length,
+    driveQueued: toFile.length,
     republish,
     status,
     results,

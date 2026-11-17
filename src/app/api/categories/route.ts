@@ -1,4 +1,28 @@
-import { fetchCategories, fetchCategoriesFallback } from "@/lib/shopify/collections";
+import {
+  createCategory,
+  fetchCategories,
+  fetchCategoriesFallback,
+} from "@/lib/shopify/collections";
+
+/** Create a new (smart, tag-based) collection from the batch form. */
+export async function POST(request: Request) {
+  const body = (await request.json().catch(() => null)) as {
+    name?: unknown;
+  } | null;
+  const name = typeof body?.name === "string" ? body.name.trim() : "";
+  if (!name) {
+    return Response.json({ error: "Give the category a name." }, { status: 400 });
+  }
+
+  try {
+    return Response.json({ category: await createCategory(name) });
+  } catch (error) {
+    return Response.json(
+      { error: error instanceof Error ? error.message : String(error) },
+      { status: 502 },
+    );
+  }
+}
 
 /**
  * The collections a batch can publish into.

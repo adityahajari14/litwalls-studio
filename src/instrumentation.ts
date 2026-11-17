@@ -29,4 +29,17 @@ export async function register() {
    * matters more than finishing a second sooner.
    */
   sharp.concurrency(2);
+
+  /**
+   * Carry on filing to Drive whatever was cut off by the last shutdown.
+   *
+   * Deferred and not awaited: register() must finish before the server takes
+   * requests, and walking every batch is not worth delaying startup for. A
+   * failure here is harmless — the Drive status poll retries the resume.
+   */
+  setTimeout(() => {
+    import("@/lib/drive/queue")
+      .then((queue) => queue.resumeDrive())
+      .catch((cause) => console.error("[drive] resume on start failed:", cause));
+  }, 3000);
 }

@@ -11,7 +11,14 @@ import {
   fetchCategories,
   fetchCategoriesFallback,
 } from "@/lib/shopify/collections";
-import type { Category, NormRect, PosterJob, SizeId } from "@/lib/print/types";
+import {
+  MOCKUP_ROTATIONS,
+  type Category,
+  type MockupRotation,
+  type NormRect,
+  type PosterJob,
+  type SizeId,
+} from "@/lib/print/types";
 
 /** The collections a poster can be filed into. Falls back to the Storefront
  *  list, as the batch form does, so an Admin token without read_collections
@@ -164,6 +171,13 @@ export async function PATCH(
         }
       }
       next.cropOverrides = overrides;
+    }
+
+    if (
+      current.kind !== "split3" &&
+      MOCKUP_ROTATIONS.includes(body.mockupRotation as MockupRotation)
+    ) {
+      next.mockupRotation = body.mockupRotation as MockupRotation;
     }
 
     if (body.priceOverrides && typeof body.priceOverrides === "object") {

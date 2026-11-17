@@ -1,9 +1,11 @@
 import "server-only";
 
+import sharp from "sharp";
+
 import { assemblePanels, composeMockup } from "@/lib/image/compose";
 import { ensureDir, jobAsset, jobDir } from "@/lib/pipeline/paths";
 import { inSequence } from "@/lib/print/gallery";
-import { printOrientation } from "@/lib/print/orientation";
+import { mockupOrientation, printOrientation } from "@/lib/print/orientation";
 import { sizeIdsFor } from "@/lib/print/sizes";
 import {
   isPerSize,
@@ -72,7 +74,9 @@ export async function renderMockups(job: PosterJob): Promise<RenderedMockup[]> {
   // source and the mockup then showed a shape the customer would not receive.
   // Meaningless for a split set, whose assembled panel shape is fixed
   // whichever way round the source is, so composeMockup ignores it there.
-  const isLandscape = printOrientation(job) === "landscape";
+  // Turned when a human has rotated sideways artwork, since `buildPoster`
+  // hands over the rotated sheet.
+  const isLandscape = mockupOrientation(job) === "landscape";
 
   const rendered: RenderedMockup[] = [];
 
@@ -160,7 +164,14 @@ async function buildPoster(
   }
 
   const asset = job.assets.find((a) => a.sizeId === MOCKUP_SOURCE_SIZE);
-  return asset ? jobAsset(job.batchId, job.id, asset.relPath) : null;
+  if (!asset) return null;
+  const path = jobAsset(job.batchId, job.id, asset.relPath);
+
+  // Artwork supplied on its side is turned here, for the mockup only. The
+  // print file itself is left alone: printed sideways it is the same sheet.
+  const rotation = job.mockupRotation ?? 0;
+  if (rotation === 0) return path;
+  return sharp(path).rotate(rotation).png().toBuffer();
 }
 
 /**
@@ -181,15 +192,18 @@ function pickAutomatic(
 ): MockupTemplate[] {
   const poster = {
     kind: job.kind,
-    orientation: printOrientation(job),
+    orientation: mockupOrientation(job),
   };
   const suitable = templates.filter((template) =>
     templateSuits(template, poster),
   );
   const pool = suitable.length > 0 ? suitable : templates;
 
-  const aspect =
+  const stored =
     job.probe && job.probe.height > 0 ? job.probe.width / job.probe.height : 1;
+  // The shape that actually hangs — a quarter turn swaps the sides.
+  const aspect =
+    poster.orientation === printOrientation(job) ? stored : 1 / stored;
 
   const scored = pool.map((template) => {
     const suits = template.suitsAspect;

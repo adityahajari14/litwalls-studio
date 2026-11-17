@@ -18,6 +18,11 @@ export type Pt = { x: number; y: number };
  */
 export type PosterKind = "normal" | "split3";
 
+/** Clockwise quarter turns, in degrees. See `PosterJob.mockupRotation`. */
+export type MockupRotation = 0 | 90 | 180 | 270;
+
+export const MOCKUP_ROTATIONS: readonly MockupRotation[] = [0, 90, 180, 270];
+
 /**
  * A collection handle. Was a closed union of four, which meant adding a
  * category was a code change; it is now whatever Shopify reports.
@@ -276,6 +281,38 @@ export type DriveRefs = {
   files: Record<string, string>;
 };
 
+/**
+ * The keys in `DriveRefs.files` a fully filed poster has: the original, plus
+ * every print file as a lossless PNG. Shared by the uploader and by everything
+ * that asks "is this poster on Drive?", so the two cannot disagree.
+ */
+export function driveFileKeys(
+  job: Pick<PosterJob, "sourceRelPath" | "assets">,
+): { original: string; prints: { key: string; name: string; asset: PosterJob["assets"][number] }[] } {
+  return {
+    original: job.sourceRelPath,
+    prints: job.assets.map((asset) => {
+      const name = `${(asset.relPath.split("/").pop() ?? asset.relPath).replace(/\.[^.]+$/, "")}.png`;
+      return { key: `sizes/${name}`, name, asset };
+    }),
+  };
+}
+
+/**
+ * Whether every file this poster needs is on Drive.
+ *
+ * Not `Boolean(job.drive)`: the folder is recorded as soon as it exists, so a
+ * poster whose uploads all failed still has a `drive` entry with no files.
+ */
+export function driveFiled(
+  job: Pick<PosterJob, "sourceRelPath" | "assets" | "drive">,
+): boolean {
+  const files = job.drive?.files;
+  if (!files || job.assets.length === 0) return false;
+  const { original, prints } = driveFileKeys(job);
+  return Boolean(files[original]) && prints.every((p) => Boolean(files[p.key]));
+}
+
 export type ShopifyRefs = {
   productId: string;
   handle: string;
@@ -300,6 +337,13 @@ export type PosterJob = {
   /** Defaulted from the batch but overridable: a batch is usually all one kind,
    *  but not always. */
   kind: PosterKind;
+  /**
+   * Degrees clockwise to turn the poster when placing it in a mockup, for
+   * artwork supplied on its side — a landscape design saved as a portrait
+   * file. Mockups only: the print files stay as supplied, since a sheet
+   * printed sideways is the same sheet. Absent means 0. Single sheets only.
+   */
+  mockupRotation?: MockupRotation;
   /** The highest stage completed. Everything at or before it is done. */
   stage: JobStage;
   status: JobStatus;
@@ -341,6 +385,19 @@ export type PosterJob = {
   /** The gallery, in order. `images[0]` becomes the product thumbnail. */
   images: ProductImageRef[];
   drive: DriveRefs | null;
+  /**
+   * Why the last attempt to file this poster to Drive failed, cleared once it
+   * succeeds. Publishing files to Drive as a best-effort second step, so
+   * without this a failure would be visible only in the publish response and
+   * then lost — a live product with nothing on Drive and no trace of why.
+   */
+  driveError?: { message: string; at: number } | null;
+  /**
+   * Waiting to be filed to Drive by the background queue. Saved on the job,
+   * not just held in memory, so a server restart mid-upload resumes these
+   * instead of leaving an empty folder behind. Cleared once filed.
+   */
+  drivePending?: boolean;
   shopify: ShopifyRefs | null;
   createdAt: number;
   updatedAt: number;
