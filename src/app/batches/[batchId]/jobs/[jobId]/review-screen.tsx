@@ -29,6 +29,7 @@ import { productOrientation } from "@/lib/print/orientation";
 import { sizesFor } from "@/lib/print/sizes";
 import { formatTitle } from "@/lib/print/title";
 import type { PartialPriceTable, PriceTable as Prices } from "@/lib/print/pricing";
+import { driveFiled } from "@/lib/print/types";
 import type {
   Batch,
   Category,
@@ -223,13 +224,25 @@ export function ReviewScreen({
         `/api/batches/${job.batchId}/jobs/${job.id}/rerender`,
         { method: "POST" },
       );
-      const result = await response.json();
-      if (!response.ok) setMessage(result.error ?? "Re-render failed.");
-      else {
+      // Parsed defensively: if the route itself is missing, the server answers
+      // with an HTML 404 page, and `response.json()` throwing used to swallow
+      // the failure — the button just stopped spinning and nothing changed.
+      const result = (await response.json().catch(() => null)) as {
+        job?: PosterJob;
+        error?: string;
+      } | null;
+      if (!response.ok || !result?.job) {
+        setMessage(
+          result?.error ??
+            `Re-render failed (HTTP ${response.status}). Mockups were not updated.`,
+        );
+      } else {
         setJob(result.job);
         setRenderVersion((v) => v + 1);
         setMessage("Re-rendered");
       }
+    } catch (cause) {
+      setMessage(cause instanceof Error ? cause.message : String(cause));
     } finally {
       setBusy(null);
     }
@@ -407,7 +420,17 @@ export function ReviewScreen({
               <Badge tone="warn">not filed — pick a collection</Badge>
             ) : null}
             {published ? <Badge tone="ok">published</Badge> : null}
-            {job.drive ? <Badge tone="ok">on Drive</Badge> : null}
+            {driveFiled(job) ? (
+              <Badge tone="ok">on Drive</Badge>
+            ) : job.drivePending ? (
+              <Badge tone="neutral" title={job.driveError?.message ?? "Waiting to upload"}>
+                {job.driveError ? "Drive · retrying" : "Drive · queued"}
+              </Badge>
+            ) : job.driveError ? (
+              <Badge tone="danger" title={job.driveError.message}>
+                not on Drive
+              </Badge>
+            ) : null}
           </>
         }
         actions={
@@ -763,7 +786,7 @@ export function ReviewScreen({
             {busy === "rerender" ? "Rendering…" : "Save & re-render"}
           </Button>
           <Button onClick={fileToDrive} disabled={busy !== null}>
-            {busy === "drive" ? "Filing…" : job.drive ? "Re-file to Drive" : "File to Drive"}
+            {busy === "drive" ? "Filing…" : driveFiled(job) ? "Re-file to Drive" : "File to Drive"}
           </Button>
 
           <Button

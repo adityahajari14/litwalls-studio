@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 
 import { DropZone } from "@/app/batches/[batchId]/drop-zone";
 import { DeleteBatch } from "@/components/delete-batch";
+import { DriveQueuePanel } from "@/components/drive-queue-panel";
 import { JobGrid } from "@/components/job-grid";
 import { PublishButton } from "@/components/publish-button";
 import { RegenerateButtons } from "@/components/regenerate-buttons";
@@ -98,6 +99,12 @@ export default async function BatchPage(
           </>
         }
       />
+
+      {jobs.some((job) => job.shopify?.productId) ? (
+        <div className="mt-6">
+          <DriveQueuePanel batchId={batch.id} />
+        </div>
+      ) : null}
 
       <div className="mt-6">
         <DropZone batchId={batch.id} initialCount={jobs.length} />

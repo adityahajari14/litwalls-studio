@@ -154,6 +154,43 @@ export function NewBatchForm({
     };
   }, []);
 
+  const [creating, setCreating] = useState(false);
+  const [newName, setNewName] = useState("");
+  const [createPending, setCreatePending] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
+
+  async function createCategory() {
+    const name = newName.trim();
+    if (!name) return;
+    setCreatePending(true);
+    setCreateError(null);
+    try {
+      const response = await fetch("/api/categories", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name }),
+      });
+      const body = await response.json();
+      if (!response.ok) {
+        setCreateError(body.error ?? "Could not create the category.");
+        return;
+      }
+      const created: Category = body.category;
+      setCategories((current) =>
+        [...(current ?? []).filter((c) => c.id !== created.id), created].sort(
+          (a, b) => a.label.localeCompare(b.label),
+        ),
+      );
+      setCategoryId(created.id);
+      setNewName("");
+      setCreating(false);
+    } catch (cause) {
+      setCreateError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setCreatePending(false);
+    }
+  }
+
   const auto = categoryId === AUTO_CATEGORY;
   const selected = categories?.find((c) => c.id === categoryId) ?? null;
 
@@ -214,8 +251,7 @@ export function NewBatchForm({
           <p className="mt-2 text-xs text-ink-400">Loading collections…</p>
         ) : categories.length === 0 ? (
           <p className="mt-2 text-xs text-warn-700">
-            No collections found in Shopify. Create one in the admin, then
-            reload.
+            No collections found in Shopify. Create one below.
           </p>
         ) : (
           <div className="mt-2 flex flex-wrap gap-2">
@@ -250,6 +286,56 @@ export function NewBatchForm({
             ))}
           </div>
         )}
+
+        {categories !== null ? (
+          creating ? (
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <input
+                value={newName}
+                onChange={(event) => setNewName(event.target.value)}
+                onKeyDown={(event) => {
+                  // Enter must not submit the whole batch form.
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    void createCategory();
+                  }
+                }}
+                placeholder="e.g. Anime"
+                autoFocus
+                className="rounded-md border border-paper-300 bg-paper-100 px-3 py-1 text-sm"
+              />
+              <Button
+                type="button"
+                variant="primary"
+                disabled={createPending || !newName.trim()}
+                onClick={() => void createCategory()}
+              >
+                {createPending ? "Creating…" : "Create"}
+              </Button>
+              <button
+                type="button"
+                onClick={() => {
+                  setCreating(false);
+                  setCreateError(null);
+                }}
+                className="text-sm text-ink-500 hover:text-ink-700"
+              >
+                Cancel
+              </button>
+              {createError ? (
+                <span className="text-sm text-danger-700">{createError}</span>
+              ) : null}
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setCreating(true)}
+              className="mt-3 text-sm text-accent-500 hover:underline"
+            >
+              + New category
+            </button>
+          )
+        ) : null}
 
         {auto ? (
           <p className="mt-2 text-xs text-ink-500">

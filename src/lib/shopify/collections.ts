@@ -109,6 +109,62 @@ export async function fetchCategories(): Promise<Category[]> {
   ).sort((a, b) => a.label.localeCompare(b.label));
 }
 
+const COLLECTION_CREATE = /* GraphQL */ `
+  mutation CollectionCreate($input: CollectionInput!) {
+    collectionCreate(input: $input) {
+      collection {
+        id
+        handle
+        title
+      }
+      userErrors {
+        field
+        message
+      }
+    }
+  }
+`;
+
+/**
+ * Create a smart collection keyed on a tag matching its title, the same shape
+ * as every existing collection — so a product tagged with it lands there with
+ * no further step. Needs the write_products scope on the Admin token.
+ */
+export async function createCategory(title: string): Promise<Category> {
+  const name = title.trim();
+  const data = await admin<{
+    collectionCreate: {
+      collection: { id: string; handle: string; title: string } | null;
+      userErrors: { field: string[] | null; message: string }[];
+    };
+  }>(COLLECTION_CREATE, {
+    input: {
+      title: name,
+      ruleSet: {
+        appliedDisjunctively: false,
+        rules: [{ column: "TAG", relation: "EQUALS", condition: name }],
+      },
+    },
+  });
+
+  const { collection, userErrors } = data.collectionCreate;
+  if (!collection || userErrors.length > 0) {
+    throw new Error(
+      userErrors.map((e) => e.message).join("; ") ||
+        "Shopify did not create the collection.",
+    );
+  }
+
+  return {
+    id: collection.handle,
+    label: collection.title,
+    suffix: suffixFor(collection.title),
+    tag: name,
+    collectionId: collection.id,
+    smart: true,
+  };
+}
+
 /** Storefront fallback — works even without a write-scoped Admin token. */
 const STOREFRONT_COLLECTIONS = /* GraphQL */ `
   query StorefrontCollections {

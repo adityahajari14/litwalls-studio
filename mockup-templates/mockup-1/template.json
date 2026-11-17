@@ -8,19 +8,19 @@
     "height": 2112
   },
   "rect": {
-    "x": 691,
-    "y": 258,
-    "width": 600,
-    "height": 848
+    "x": 656,
+    "y": 198,
+    "width": 653,
+    "height": 923
   },
   "shadow": 0.22,
   "sizing": {
     "referenceSize": "A3",
     "base": {
-      "x": 691,
-      "y": 258,
-      "width": 600,
-      "height": 848
+      "x": 656,
+      "y": 198,
+      "width": 653,
+      "height": 923
     },
     "perSize": false
   },

@@ -1,11 +1,14 @@
-import { uploadToDrive } from "@/lib/pipeline/stages/drive";
-import { readJob, updateJob } from "@/lib/pipeline/store";
+import { fileToDriveNow } from "@/lib/drive/queue";
+import { readJob } from "@/lib/pipeline/store";
 
 /**
- * File one poster's artwork to Drive.
+ * File one poster's artwork to Drive, now, and wait for the result.
  *
  * Separate from publishing so the two can fail independently: a Drive outage
- * should not block a Shopify publish, and vice versa.
+ * should not block a Shopify publish, and vice versa. Goes through the Drive
+ * queue rather than around it, so pressing this while the background queue is
+ * already filing the same poster joins that upload instead of duplicating it.
+ * A failure is saved on the job and retried by the queue.
  */
 export async function POST(
   _request: Request,
@@ -13,20 +16,17 @@ export async function POST(
 ) {
   const { batchId, jobId } = await ctx.params;
 
-  const job = await readJob(batchId, jobId);
-  if (!job) return Response.json({ error: "Job not found." }, { status: 404 });
+  if (!(await readJob(batchId, jobId))) {
+    return Response.json({ error: "Job not found." }, { status: 404 });
+  }
 
-  const result = await uploadToDrive(job);
+  const result = await fileToDriveNow(batchId, jobId);
   if (!result.ok) {
     return Response.json({ error: result.error }, { status: 502 });
   }
 
-  const updated = await updateJob(batchId, jobId, (current) => ({
-    ...current,
-    drive: result.value,
-    // Only advance the stage once every file is actually up there.
-    stage: current.stage === "approved" ? "uploaded" : current.stage,
-  }));
-
-  return Response.json({ job: updated, files: Object.keys(result.value.files).length });
+  return Response.json({
+    job: await readJob(batchId, jobId),
+    files: Object.keys(result.value.files).length,
+  });
 }

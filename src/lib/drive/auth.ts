@@ -163,6 +163,8 @@ export async function getAccessToken(): Promise<Result<string>> {
     const response = await fetch(TOKEN_URL, {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      // A hung refresh would stall every upload queued behind it.
+      signal: AbortSignal.timeout(30_000),
       body: new URLSearchParams({
         refresh_token: token.refreshToken,
         client_id: clientId,

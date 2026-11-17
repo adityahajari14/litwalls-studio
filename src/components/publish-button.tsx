@@ -31,6 +31,9 @@ export function PublishButton({
   const router = useRouter();
   const [pending, setPending] = useState<"publish" | "republish" | null>(null);
   const [live, setLive] = useState(false);
+  // On by default: every poster on the storefront should have its print files
+  // on Drive. Untick to publish or republish without touching Drive.
+  const [toDrive, setToDrive] = useState(true);
   const [result, setResult] = useState<string | null>(null);
   const [errors, setErrors] = useState<string[]>([]);
 
@@ -56,6 +59,7 @@ export function PublishButton({
         body: JSON.stringify({
           status: live ? "ACTIVE" : "DRAFT",
           republish: mode === "republish",
+          drive: toDrive,
         }),
       });
       const body = await response.json();
@@ -75,21 +79,15 @@ export function PublishButton({
           : `${body.published} published as ${body.status}`,
       );
       if (body.failed) setResult((prev) => `${prev}, ${body.failed} failed`);
-      if (body.driveFailed) {
-        setResult((prev) => `${prev}, ${body.driveFailed} not filed to Drive`);
+      if (body.driveQueued) {
+        setResult(
+          (prev) => `${prev} · ${body.driveQueued} filing to Drive in the background`,
+        );
       }
       setErrors(
-        (body.results ?? []).flatMap(
-          (r: {
-            ok: boolean;
-            job: string;
-            detail: string;
-            driveError?: string;
-          }) => [
-            ...(r.ok ? [] : [`${r.job}: ${r.detail}`]),
-            ...(r.driveError ? [`${r.job}: Drive — ${r.driveError}`] : []),
-          ],
-        ),
+        (body.results ?? [])
+          .filter((r: { ok: boolean }) => !r.ok)
+          .map((r: { job: string; detail: string }) => `${r.job}: ${r.detail}`),
       );
       router.refresh();
     } catch (cause) {
@@ -146,6 +144,20 @@ export function PublishButton({
             Go live (ACTIVE) instead of draft
           </label>
         ) : null}
+
+        <label
+          className="flex cursor-pointer items-center gap-1.5 text-xs text-ink-500"
+          title="Upload the original and lossless print files to Google Drive after publishing. Runs in the background and retries on its own."
+        >
+          <input
+            type="checkbox"
+            checked={toDrive}
+            onChange={(e) => setToDrive(e.target.checked)}
+            disabled={busy}
+            className="accent-[var(--color-accent-500)]"
+          />
+          File to Google Drive
+        </label>
 
         {result ? (
           <span className="animate-fade-rise text-xs text-ink-600">{result}</span>

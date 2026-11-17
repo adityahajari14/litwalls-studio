@@ -1,15 +1,23 @@
 import "server-only";
 
-import { rm } from "node:fs/promises";
+import { rm, stat } from "node:fs/promises";
 
-import { ensureFolderPath, uploadFile } from "@/lib/drive/files";
+import {
+  claimFolder,
+  createProductFolder,
+  ensureFolderPath,
+  findFile,
+  findProductFolder,
+  listFolderFileIds,
+  uploadFile,
+} from "@/lib/drive/files";
 import { renderLosslessPrintFile } from "@/lib/pipeline/stages/crop";
 import { jobAsset } from "@/lib/pipeline/paths";
-import { readBatch, updateJob } from "@/lib/pipeline/store";
+import { listBatches, listJobs, readBatch, updateJob } from "@/lib/pipeline/store";
 import { mainCategoryFor } from "@/lib/print/categories";
 import { formatTitle } from "@/lib/print/title";
 import { err, ok, type Result } from "@/lib/result";
-import type { DriveRefs, PosterJob } from "@/lib/print/types";
+import { driveFileKeys, type DriveRefs, type PosterJob } from "@/lib/print/types";
 
 /**
  * File a poster's print-ready artwork to Google Drive.
@@ -52,6 +60,25 @@ function mimeFor(relPath: string): string {
  * batched at the end, so a crash or a lost connection loses at most one file's
  * worth of work instead of the whole poster's.
  */
+/**
+ * One folder walk at a time, process-wide.
+ *
+ * Folder creation is find-or-create, which is only idempotent when nothing
+ * else is doing the same at once: two posters in one collection filed in
+ * parallel would both find no "Anime" folder and both create one. Held on
+ * globalThis so a dev-server hot reload of this module shares the same lock.
+ */
+const lockHolder = globalThis as typeof globalThis & {
+  __litwallsDriveFolderLock?: Promise<unknown>;
+};
+
+async function withFolderLock<T>(work: () => Promise<T>): Promise<T> {
+  const previous = lockHolder.__litwallsDriveFolderLock ?? Promise.resolve();
+  const run = previous.then(work, work);
+  lockHolder.__litwallsDriveFolderLock = run.catch(() => undefined);
+  return run;
+}
+
 /** Where a poster with no collection yet is filed on Drive. A real folder
  *  rather than the Drive root, so these are easy to find and re-file once
  *  someone picks a collection. */
@@ -77,12 +104,15 @@ export async function uploadToDrive(job: PosterJob): Promise<Result<DriveRefs>> 
   const category = mainCategoryFor(job, batch);
 
   // The folder is named for the product so it can be found from a Shopify
-  // order. The sequence is a placeholder until publish assigns the real one.
+  // order — with the number Shopify actually has. That lives on
+  // `shopify.sequence`; `metadata.sequence` is only an optional override and
+  // is normally unset, which is why every poster used to land in "… #01" and
+  // share it with every other poster of the same subject.
   const folderName = safeFolderName(
     formatTitle(
       {
         subject,
-        sequence: job.metadata?.sequence ?? 1,
+        sequence: job.shopify?.sequence ?? job.metadata?.sequence ?? 1,
         subtitle: job.metadata?.subtitle,
       },
       // The suffix is stripped off the very next line, so a poster not yet
@@ -92,10 +122,9 @@ export async function uploadToDrive(job: PosterJob): Promise<Result<DriveRefs>> 
     ).replace(/\s*\|.*$/, ""),
   );
 
-  const folder = await ensureFolderPath([
-    category?.label ?? UNFILED_FOLDER,
-    folderName,
-  ]);
+  const folder = await withFolderLock(() =>
+    resolvePosterFolder(job, category?.label ?? UNFILED_FOLDER, folderName),
+  );
   if (!folder.ok) return folder;
 
   const existing: DriveRefs = job.drive ?? { folderId: folder.value, files: {} };
@@ -116,20 +145,18 @@ export async function uploadToDrive(job: PosterJob): Promise<Result<DriveRefs>> 
   // The key for a print file is its PNG name, so posters filed before this
   // (whose entries are the old .jpg paths) upload the lossless versions
   // instead of being skipped as "already there".
+  const keys = driveFileKeys(job);
   const targets = [
     {
-      key: job.sourceRelPath,
+      key: keys.original,
       name: `original${extensionOf(job.sourceRelPath)}`,
       render: null as null | ((outPath: string) => Promise<void>),
     },
-    ...job.assets.map((asset) => {
-      const name = `${(asset.relPath.split("/").pop() ?? asset.relPath).replace(/\.[^.]+$/, "")}.png`;
-      return {
-        key: `sizes/${name}`,
-        name,
-        render: (outPath: string) => renderLosslessPrintFile(job, asset, outPath),
-      };
-    }),
+    ...keys.prints.map(({ key, name, asset }) => ({
+      key,
+      name,
+      render: (outPath: string) => renderLosslessPrintFile(job, asset, outPath),
+    })),
   ];
 
   for (const target of targets) {
@@ -151,6 +178,22 @@ export async function uploadToDrive(job: PosterJob): Promise<Result<DriveRefs>> 
           }`,
         );
       }
+    }
+
+    // Already in the folder but not recorded here — the process died between
+    // Drive finishing the upload and the id being saved. Adopt it rather than
+    // uploading a duplicate beside it. Matched on name AND byte size, so it
+    // can only ever be this poster's own file.
+    const size = await stat(localPath).then((s) => s.size).catch(() => -1);
+    const onDrive = size >= 0 ? await findFile(target.name, folder.value, size) : null;
+    if (onDrive?.ok && onDrive.value) {
+      if (target.render) await rm(localPath, { force: true }).catch(() => undefined);
+      files[target.key] = onDrive.value;
+      await updateJob(job.batchId, job.id, (current) => ({
+        ...current,
+        drive: { folderId: folder.value, files },
+      }));
+      continue;
     }
 
     const result = await uploadFile({
@@ -179,6 +222,62 @@ export async function uploadToDrive(job: PosterJob): Promise<Result<DriveRefs>> 
   }
 
   return ok({ folderId: folder.value, files });
+}
+
+/**
+ * This poster's own folder: <root>/<category>/<product name>.
+ *
+ * In order of preference:
+ *   1. the folder already tagged with this poster's product;
+ *   2. the folder this poster used before, IF no other poster uses it too —
+ *      renamed to the right number and tagged, keeping what is in it;
+ *   3. a fresh tagged folder.
+ * A folder shared with other posters (the old "#01" collisions) is never
+ * reused: its files are a mix of several posters' and cannot be trusted.
+ */
+async function resolvePosterFolder(
+  job: PosterJob,
+  categoryLabel: string,
+  folderName: string,
+): Promise<Result<string>> {
+  const category = await ensureFolderPath([categoryLabel]);
+  if (!category.ok) return category;
+
+  // Before publish there is no product yet; the job id stands in, and the
+  // folder is claimed under the product key once it is published.
+  const productKey = job.shopify?.productId ?? `job:${job.batchId}/${job.id}`;
+
+  const tagged = await findProductFolder(productKey, category.value);
+  if (!tagged.ok) return tagged;
+  if (tagged.value) return ok(tagged.value);
+
+  const previous = job.drive?.folderId;
+  if (previous && (await folderIsOnlyThisPosters(job, previous))) {
+    const claimed = await claimFolder(previous, folderName, category.value, productKey);
+    if (!claimed.ok) return claimed;
+    if (claimed.value) return ok(previous);
+  }
+
+  return createProductFolder(folderName, category.value, productKey);
+}
+
+/**
+ * Whether a folder holds nothing but files this poster uploaded, and no other
+ * poster points at it. Both checks are needed: a folder can be referenced by
+ * this poster alone and still hold files from posters that were since moved
+ * or deleted, and those leftovers are indistinguishable by name.
+ */
+async function folderIsOnlyThisPosters(job: PosterJob, folderId: string): Promise<boolean> {
+  const mine = new Set(Object.values(job.drive?.files ?? {}));
+  const contents = await listFolderFileIds(folderId);
+  if (!contents.ok || !contents.value.every((id) => mine.has(id))) return false;
+
+  for (const batch of await listBatches()) {
+    for (const other of await listJobs(batch.id)) {
+      if (other.id !== job.id && other.drive?.folderId === folderId) return false;
+    }
+  }
+  return true;
 }
 
 function extensionOf(relPath: string): string {
