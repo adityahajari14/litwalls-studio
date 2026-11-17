@@ -11,11 +11,13 @@ import {
   listFolderFileIds,
   uploadFile,
 } from "@/lib/drive/files";
+import { posterFolderName } from "@/lib/drive/naming";
 import { renderLosslessPrintFile } from "@/lib/pipeline/stages/crop";
 import { jobAsset } from "@/lib/pipeline/paths";
+import { listPublished } from "@/lib/pipeline/registry";
 import { listBatches, listJobs, readBatch, updateJob } from "@/lib/pipeline/store";
 import { mainCategoryFor } from "@/lib/print/categories";
-import { formatTitle } from "@/lib/print/title";
+import { parseTitle } from "@/lib/print/title";
 import { err, ok, type Result } from "@/lib/result";
 import { driveFileKeys, type DriveRefs, type PosterJob } from "@/lib/print/types";
 
@@ -28,15 +30,23 @@ import { driveFileKeys, type DriveRefs, type PosterJob } from "@/lib/print/types
  * a search across size folders.
  */
 
-/** Windows and Drive both dislike these; a folder named with them is a mess. */
-function safeFolderName(name: string): string {
-  return (
-    name
-      .replace(/[<>:"/\\|?*]+/g, " ")
-      .replace(/\s+/g, " ")
-      .trim()
-      .slice(0, 120) || "Untitled"
-  );
+/**
+ * The number in the poster's Shopify title, or null before it is published.
+ *
+ * Products published before `shopify.sequence` was recorded do not carry it,
+ * so their number is read back off the title in the published registry —
+ * the same fallback a republish uses.
+ */
+async function productSequence(job: PosterJob): Promise<number | null> {
+  if (job.shopify?.sequence) return job.shopify.sequence;
+  if (job.shopify?.productId) {
+    const record = (await listPublished()).find(
+      (entry) => entry.productId === job.shopify?.productId,
+    );
+    const fromTitle = record ? parseTitle(record.title)?.sequence : null;
+    if (fromTitle) return fromTitle;
+  }
+  return job.metadata?.sequence ?? null;
 }
 
 function mimeFor(relPath: string): string {
@@ -107,20 +117,14 @@ export async function uploadToDrive(job: PosterJob): Promise<Result<DriveRefs>> 
   // order — with the number Shopify actually has. That lives on
   // `shopify.sequence`; `metadata.sequence` is only an optional override and
   // is normally unset, which is why every poster used to land in "… #01" and
-  // share it with every other poster of the same subject.
-  const folderName = safeFolderName(
-    formatTitle(
-      {
-        subject,
-        sequence: job.shopify?.sequence ?? job.metadata?.sequence ?? 1,
-        subtitle: job.metadata?.subtitle,
-      },
-      // The suffix is stripped off the very next line, so a poster not yet
-      // filed into a collection files fine — it just lands under "Unfiled"
-      // rather than blocking an upload that has nothing to do with Shopify.
-      category ?? { suffix: "" },
-    ).replace(/\s*\|.*$/, ""),
-  );
+  // share it with every other poster of the same subject. With no number at
+  // all (not yet published), the name says "unpublished" rather than guess.
+  const folderName = posterFolderName({
+    subject,
+    subtitle: job.metadata?.subtitle,
+    sequence: await productSequence(job),
+    jobId: job.id,
+  });
 
   const folder = await withFolderLock(() =>
     resolvePosterFolder(job, category?.label ?? UNFILED_FOLDER, folderName),
@@ -228,7 +232,8 @@ export async function uploadToDrive(job: PosterJob): Promise<Result<DriveRefs>> 
  * This poster's own folder: <root>/<category>/<product name>.
  *
  * In order of preference:
- *   1. the folder already tagged with this poster's product;
+ *   1. the folder already tagged with this poster's product (renamed to the
+ *      current product name if it has drifted);
  *   2. the folder this poster used before, IF no other poster uses it too —
  *      renamed to the right number and tagged, keeping what is in it;
  *   3. a fresh tagged folder.
@@ -249,7 +254,14 @@ async function resolvePosterFolder(
 
   const tagged = await findProductFolder(productKey, category.value);
   if (!tagged.ok) return tagged;
-  if (tagged.value) return ok(tagged.value);
+  if (tagged.value) {
+    // Re-applied every time: the name may have been made before the real
+    // number was known ("#01" guessed, or "unpublished"). Cheap, and it
+    // keeps the folder findable by the product's title.
+    const renamed = await claimFolder(tagged.value, folderName, category.value, productKey);
+    if (!renamed.ok) return renamed;
+    return ok(tagged.value);
+  }
 
   const previous = job.drive?.folderId;
   if (previous && (await folderIsOnlyThisPosters(job, previous))) {

@@ -9,6 +9,8 @@ type Status = {
   published: number;
   filed: number;
   missing: number;
+  /** Of `missing`: on Drive, but the Shopify product has no folder link yet. */
+  unlinked: number;
   pending: number;
   failed: number;
   queue: {
@@ -116,7 +118,12 @@ export function DriveQueuePanel({ batchId }: { batchId?: string }) {
             {status.published === 1 ? "" : "s"} filed
           </span>
           {!allFiled ? (
-            <span className="tnum text-ink-400">· {status.missing} missing</span>
+            <span className="tnum text-ink-400">
+              · {status.missing} missing
+              {status.unlinked > 0
+                ? ` (${status.unlinked} on Drive but not yet linked on Shopify)`
+                : ""}
+            </span>
           ) : null}
         </p>
 

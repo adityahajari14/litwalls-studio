@@ -89,6 +89,22 @@ gitignored and must stay that way.
 | `npm test` | Pure-logic tests, run against a snapshot of the real catalogue |
 | `npm run check:drift` | Verify mirrored constants still match `../litwalls` |
 | `node scripts/refresh-titles.mjs` | Re-snapshot live product titles for the tests |
+| `npm run check:drive-links` | Report every Shopify product without a working Drive folder link (read-only; `-- --strict` also fails on products Studio never made) |
+
+## Drive links on products and orders
+
+Each poster gets its own Drive folder, and once its print files are uploaded,
+Studio writes the folder link to the product's `custom.drive_folder` metafield.
+The metafield is pinned, so the link shows in Shopify admin on the product page.
+
+To get the links onto every **order**, set up the Shopify Flow workflow in
+[docs/shopify-flow-drive-links.md](docs/shopify-flow-drive-links.md). It runs
+inside Shopify, so it works even while Studio is off.
+
+The dashboard's **Old shared Drive folders** panel clears out the folders the
+old uploader shared between posters. It only does that once every poster in a
+folder has been moved to its own. Removed folders go to the Drive trash, where
+they can be restored for 30 days.
 
 ## Notes
 

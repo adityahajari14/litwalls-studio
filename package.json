@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "check:drift": "node scripts/check-drift.mjs",
+    "check:drive-links": "node scripts/check-drive-links.mjs",
     "test": "node --conditions react-server --import ./tests/alias-hook.mjs --test \"tests/**/*.test.ts\"",
     "models:fetch": "node scripts/fetch-upscale-model.mjs",
     "postinstall": "node scripts/fetch-upscale-model.mjs"

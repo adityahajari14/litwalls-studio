@@ -29,6 +29,7 @@ import { productOrientation } from "@/lib/print/orientation";
 import { sizesFor } from "@/lib/print/sizes";
 import { formatTitle } from "@/lib/print/title";
 import type { PartialPriceTable, PriceTable as Prices } from "@/lib/print/pricing";
+import { driveFolderUrl } from "@/lib/drive/naming";
 import { driveFiled } from "@/lib/print/types";
 import type {
   Batch,
@@ -420,8 +421,15 @@ export function ReviewScreen({
               <Badge tone="warn">not filed — pick a collection</Badge>
             ) : null}
             {published ? <Badge tone="ok">published</Badge> : null}
-            {driveFiled(job) ? (
-              <Badge tone="ok">on Drive</Badge>
+            {driveFiled(job) && job.drive ? (
+              <a
+                href={driveFolderUrl(job.drive.folderId)}
+                target="_blank"
+                rel="noreferrer"
+                title="Open this poster's Drive folder"
+              >
+                <Badge tone="ok">on Drive ↗</Badge>
+              </a>
             ) : job.drivePending ? (
               <Badge tone="neutral" title={job.driveError?.message ?? "Waiting to upload"}>
                 {job.driveError ? "Drive · retrying" : "Drive · queued"}

@@ -6,7 +6,7 @@ import {
   resumeDrive,
 } from "@/lib/drive/queue";
 import { listBatches, listJobs } from "@/lib/pipeline/store";
-import { driveFiled } from "@/lib/print/types";
+import { driveComplete, driveFiled } from "@/lib/print/types";
 
 /**
  * Drive filing status, for one batch (`?batchId=`) or everything.
@@ -25,15 +25,20 @@ export async function GET(request: Request) {
 
   let published = 0;
   let filed = 0;
+  let unlinked = 0;
   let pending = 0;
   let failed = 0;
   for (const id of batchIds) {
     for (const job of await listJobs(id)) {
       if (!job.shopify?.productId) continue;
       published += 1;
-      if (driveFiled(job)) filed += 1;
-      else if (job.drivePending) pending += 1;
-      else if (job.driveError) failed += 1;
+      // "Filed" means done: files on Drive AND the product linked to them.
+      if (driveComplete(job)) filed += 1;
+      else {
+        if (driveFiled(job)) unlinked += 1;
+        if (job.drivePending) pending += 1;
+        else if (job.driveError) failed += 1;
+      }
     }
   }
 
@@ -42,6 +47,8 @@ export async function GET(request: Request) {
     published,
     filed,
     missing: published - filed,
+    /** Of `missing`: files all on Drive, but the Shopify product has no link yet. */
+    unlinked,
     pending,
     failed,
     queue: driveQueueStatus(batchId ?? undefined),

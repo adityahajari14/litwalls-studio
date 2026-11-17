@@ -148,7 +148,7 @@ export async function findFile(
 }
 
 /** The private property that ties a Drive folder to one poster's product. */
-const PRODUCT_PROPERTY = "litwallsProduct";
+export const PRODUCT_PROPERTY = "litwallsProduct";
 
 async function driveJson(
   url: string,
@@ -224,6 +224,46 @@ export async function listFolderFileIds(folderId: string): Promise<Result<string
     pageToken = (page.value.nextPageToken as string | undefined) ?? "";
   } while (pageToken);
   return ok(ids);
+}
+
+/**
+ * Every item matching a query, across all pages, with the given fields.
+ *
+ * Studio's scope is `drive.file`, so this only ever sees what Studio itself
+ * created — never anything else in the person's Drive.
+ */
+export async function listAll<T>(query: string, fields: string): Promise<Result<T[]>> {
+  const items: T[] = [];
+  let pageToken = "";
+  do {
+    const page = await driveJson(
+      `${API}/files?q=${encodeURIComponent(query)}&fields=nextPageToken,files(${fields})&pageSize=1000${
+        pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : ""
+      }`,
+      { label: "Drive listing failed" },
+    );
+    if (!page.ok) return page;
+    items.push(...((page.value.files as T[] | undefined) ?? []));
+    pageToken = (page.value.nextPageToken as string | undefined) ?? "";
+  } while (pageToken);
+  return ok(items);
+}
+
+export const FOLDER_QUERY = `mimeType = '${FOLDER_MIME}' and trashed = false`;
+export const FILE_QUERY = `mimeType != '${FOLDER_MIME}' and trashed = false`;
+
+/**
+ * Move a file or folder to the Drive trash — recoverable from there for 30
+ * days, unlike a delete. A folder takes its contents with it.
+ */
+export async function trashItem(id: string): Promise<Result<void>> {
+  const result = await driveJson(`${API}/files/${encodeURIComponent(id)}?fields=id`, {
+    label: "Could not move to Drive trash",
+    method: "PATCH",
+    body: JSON.stringify({ trashed: true }),
+  });
+  if (!result.ok) return result;
+  return ok(undefined);
 }
 
 /** Create a folder tagged as this product's. */

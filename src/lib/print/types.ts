@@ -313,6 +313,28 @@ export function driveFiled(
   return Boolean(files[original]) && prints.every((p) => Boolean(files[p.key]));
 }
 
+/**
+ * Whether the Shopify product still needs its Drive folder link written (or
+ * rewritten, after the poster moved to a different folder).
+ */
+export function driveLinkPending(
+  job: Pick<PosterJob, "shopify" | "drive" | "driveLinkedFolderId">,
+): boolean {
+  return Boolean(
+    job.shopify?.productId &&
+      job.drive?.folderId &&
+      job.driveLinkedFolderId !== job.drive.folderId,
+  );
+}
+
+/** Whether a published poster is completely done with Drive: every file
+ *  uploaded AND the product linked to the folder. */
+export function driveComplete(
+  job: Pick<PosterJob, "sourceRelPath" | "assets" | "drive" | "shopify" | "driveLinkedFolderId">,
+): boolean {
+  return driveFiled(job) && !driveLinkPending(job);
+}
+
 export type ShopifyRefs = {
   productId: string;
   handle: string;
@@ -398,6 +420,12 @@ export type PosterJob = {
    * instead of leaving an empty folder behind. Cleared once filed.
    */
   drivePending?: boolean;
+  /**
+   * The Drive folder whose link was last written to the Shopify product's
+   * `custom.drive_folder` metafield. Compared with `drive.folderId`, so a
+   * poster moved to a new folder gets its product's link updated too.
+   */
+  driveLinkedFolderId?: string | null;
   shopify: ShopifyRefs | null;
   createdAt: number;
   updatedAt: number;

@@ -2,7 +2,8 @@ import "server-only";
 
 import { uploadToDrive } from "@/lib/pipeline/stages/drive";
 import { listBatches, listJobs, readJob, updateJob } from "@/lib/pipeline/store";
-import { driveFiled, type DriveRefs } from "@/lib/print/types";
+import { driveComplete, type DriveRefs } from "@/lib/print/types";
+import { setDriveLink } from "@/lib/shopify/drive-link";
 import { err, type Result } from "@/lib/result";
 
 /**
@@ -220,19 +221,31 @@ async function fileOne(key: Key): Promise<Result<DriveRefs>> {
 
   if (result.ok) {
     const filed = result.value;
-    state.attempts.delete(key);
-    state.labels.delete(key);
-    state.filedThisSession += 1;
-    await updateJob(batchId, jobId, (current) => ({
-      ...current,
-      drive: filed,
-      driveError: null,
-      // Cleared only once every file is confirmed, so a partial upload stays
-      // queued rather than being mistaken for done.
-      drivePending: !driveFiled({ ...current, drive: filed }),
-      stage: current.stage === "approved" ? "uploaded" : current.stage,
-    })).catch(() => undefined);
-    return result;
+    // The files are up; now point the Shopify product at them. A failure here
+    // is treated like a failed upload — saved, retried with backoff, poster
+    // left pending — because a product with no link is exactly the thing this
+    // exists to prevent. The retry is cheap: every file is already recorded
+    // as uploaded, so it skips straight back to this step.
+    const linkError = await linkProduct(batchId, jobId, filed.folderId);
+    if (linkError === null) {
+      state.attempts.delete(key);
+      state.labels.delete(key);
+      state.filedThisSession += 1;
+      await updateJob(batchId, jobId, (current) => ({
+        ...current,
+        drive: filed,
+        driveError: null,
+        // Cleared only once every file is confirmed AND the product is
+        // linked, so a partial job stays queued rather than read as done.
+        drivePending: !driveComplete({ ...current, drive: filed }),
+        stage: current.stage === "approved" ? "uploaded" : current.stage,
+      })).catch(() => undefined);
+      return result;
+    }
+    await updateJob(batchId, jobId, (current) => ({ ...current, drive: filed })).catch(
+      () => undefined,
+    );
+    result = { ok: false, error: linkError };
   }
 
   const message = result.error;
@@ -263,6 +276,36 @@ async function fileOne(key: Key): Promise<Result<DriveRefs>> {
 }
 
 /**
+ * Write the Drive folder link onto the poster's Shopify product, if it has
+ * one and the link is not already this folder. Returns an error message, or
+ * null when there was nothing to do or it worked.
+ *
+ * Reads the job afresh: publishing may have created the product while the
+ * files were uploading.
+ */
+async function linkProduct(
+  batchId: string,
+  jobId: string,
+  folderId: string,
+): Promise<string | null> {
+  const job = await readJob(batchId, jobId);
+  const productId = job?.shopify?.productId;
+  if (!job || !productId || job.driveLinkedFolderId === folderId) return null;
+  try {
+    await setDriveLink(productId, folderId);
+  } catch (cause) {
+    return `Filed to Drive, but could not add the folder link to the Shopify product: ${
+      cause instanceof Error ? cause.message : String(cause)
+    }`;
+  }
+  await updateJob(batchId, jobId, (current) => ({
+    ...current,
+    driveLinkedFolderId: folderId,
+  })).catch(() => undefined);
+  return null;
+}
+
+/**
  * Re-queue every poster still marked pending — run once per server start, so
  * work interrupted by a restart carries on by itself.
  */
@@ -284,10 +327,15 @@ export async function resumeDrive(): Promise<void> {
 }
 
 /**
- * Queue every published poster that is not fully on Drive (one batch, or
- * all). With `everything`, queue every published poster regardless: cheap for
- * one already filed in its own folder (a rename at most), and it moves any
- * poster still sharing a folder with others into one of its own.
+ * Queue every published poster that is not fully on Drive, or whose product
+ * is not yet linked to its folder (one batch, or all). With `everything`,
+ * queue every published poster regardless: cheap for one already filed in its
+ * own folder (a rename at most), and it moves any poster still sharing a
+ * folder with others into one of its own.
+ *
+ * A poster filed by the old name-matched code has an untagged folder, so
+ * queueing it for its link also moves it into a folder of its own — the
+ * link written is to that folder, never to a shared one.
  */
 export async function enqueueMissing(
   batchId?: string,
@@ -298,7 +346,7 @@ export async function enqueueMissing(
   const refs: { batchId: string; jobId: string }[] = [];
   for (const batch of batches) {
     for (const job of await listJobs(batch.id)) {
-      if (job.shopify?.productId && (everything || !driveFiled(job))) {
+      if (job.shopify?.productId && (everything || !driveComplete(job))) {
         refs.push({ batchId: batch.id, jobId: job.id });
       }
     }

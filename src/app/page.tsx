@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { DriveCleanupPanel } from "@/components/drive-cleanup-panel";
 import { DriveQueuePanel } from "@/components/drive-queue-panel";
 import { DriveStatus } from "@/components/drive-status";
 import {
@@ -73,6 +74,7 @@ export default async function Home({
       <div className="mt-6 space-y-3">
         <DriveStatus />
         <DriveQueuePanel />
+        <DriveCleanupPanel />
       </div>
 
       <Section title="All batches" className="mt-8">
