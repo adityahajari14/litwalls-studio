@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { PriceTable } from "@/components/price-table";
-import { Button, Field, Input } from "@/components/ui";
+import { Badge, Button, Field, Input } from "@/components/ui";
 import { AUTO_CATEGORY } from "@/lib/print/categories";
 import { sizesFor } from "@/lib/print/sizes";
 import type { PartialPriceTable, PriceTable as Prices } from "@/lib/print/pricing";
@@ -54,6 +54,8 @@ export function NewBatchForm({
   const [pending, setPending] = useState(false);
 
   const [templates, setTemplates] = useState<TemplateOption[] | null>(null);
+  // A sequence, not a set: mockups are rendered and published in this order,
+  // and the first is the thumbnail of every product in the batch.
   const [templateIds, setTemplateIds] = useState<string[]>([]);
   // Templates the user has ticked or unticked by hand — kept out of the
   // auto-recompute that runs when the format changes.
@@ -104,17 +106,27 @@ export function NewBatchForm({
   }, []);
 
   // Changing the format re-picks the templates that suit it — but leaves
-  // anything the user has toggled by hand exactly as they left it.
+  // anything the user has toggled by hand exactly as they left it, and keeps
+  // whatever order the ones that stay were already in. Newly suitable ones
+  // join at the end rather than being slotted back into library order, which
+  // would undo a sequence someone had just arranged.
   function changeKind(next: PosterKind) {
     setKind(next);
     if (!templates) return;
     setTemplateIds((current) => {
-      const chosen = new Set(current.filter((id) => pinnedTemplates.has(id)));
-      for (const template of templates) {
-        if (pinnedTemplates.has(template.id)) continue;
-        if (templateFitsKind(template, next)) chosen.add(template.id);
-      }
-      return templates.filter((t) => chosen.has(t.id)).map((t) => t.id);
+      const fits = new Set(
+        templates.filter((t) => templateFitsKind(t, next)).map((t) => t.id),
+      );
+      const staying = current.filter(
+        (id) => pinnedTemplates.has(id) || fits.has(id),
+      );
+      const joining = templates
+        .map((t) => t.id)
+        .filter(
+          (id) =>
+            fits.has(id) && !pinnedTemplates.has(id) && !staying.includes(id),
+        );
+      return [...staying, ...joining];
     });
   }
 
@@ -125,6 +137,16 @@ export function NewBatchForm({
         ? current.filter((x) => x !== id)
         : [...current, id],
     );
+  }
+
+  function moveTemplate(from: number, to: number) {
+    setTemplateIds((current) => {
+      if (to < 0 || to >= current.length) return current;
+      const next = [...current];
+      const [id] = next.splice(from, 1);
+      next.splice(to, 0, id);
+      return next;
+    });
   }
 
   function toggleLibrary(id: string) {
@@ -325,9 +347,9 @@ export function NewBatchForm({
       <fieldset>
         <legend className="text-sm font-medium text-ink-700">Mockups</legend>
         <p className="mt-1 text-xs text-ink-400">
-          Rendered for every poster in this batch. Ones suited to the format
-          above are ticked to start — change any of them, or leave it and the
-          mockup stage picks automatically.
+          Rendered for every poster in this batch and published in this order
+          — the first is each product&rsquo;s thumbnail. Ones suited to the
+          format above are chosen to start; reorder or remove any of them.
         </p>
         {templates === null ? (
           <p className="mt-2 text-xs text-ink-400">Loading mockups…</p>
@@ -336,24 +358,101 @@ export function NewBatchForm({
             No mockup templates yet. Add one under Mockups.
           </p>
         ) : (
-          <div className="mt-2 flex flex-wrap gap-2">
-            {templates.map((template) => {
-              const on = templateIds.includes(template.id);
-              return (
-                <button
-                  key={template.id}
-                  type="button"
-                  onClick={() => toggleTemplate(template.id)}
-                  className={`rounded-full border px-3 py-1 text-sm transition-colors ${
-                    on
-                      ? "border-accent-500 bg-accent-500 text-white"
-                      : "border-paper-300 bg-paper-200 text-ink-600 hover:border-paper-400"
-                  }`}
-                >
-                  {template.name}
-                </button>
-              );
-            })}
+          <div className="mt-2">
+            {templateIds.length === 0 ? (
+              <p className="rounded-md border border-dashed border-paper-300 px-3 py-4 text-center text-xs text-ink-400">
+                None chosen — the mockup stage picks up to three that suit each
+                poster, in its own order.
+              </p>
+            ) : (
+              // The same numbered list, arrows and all, as the gallery on the
+              // review screen: it is the same decision made one step earlier.
+              <ol className="space-y-1.5">
+                {templateIds.map((id, index) => (
+                  <li
+                    key={id}
+                    className="flex items-center gap-2 rounded-md border border-paper-200 bg-paper-200 p-1.5"
+                  >
+                    <span className="tnum w-4 shrink-0 text-center text-xs text-ink-400">
+                      {index + 1}
+                    </span>
+
+                    <div className="size-10 shrink-0 overflow-hidden rounded border border-paper-200">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={`/api/templates/${encodeURIComponent(id)}/background`}
+                        alt=""
+                        loading="lazy"
+                        className="h-full w-full object-cover"
+                      />
+                    </div>
+
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-xs font-medium text-ink-700">
+                        {templates.find((t) => t.id === id)?.name ?? id}
+                      </span>
+                      {index === 0 ? (
+                        <Badge tone="accent" className="mt-0.5">
+                          thumbnail
+                        </Badge>
+                      ) : null}
+                    </span>
+
+                    <span className="flex shrink-0 items-center">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => moveTemplate(index, index - 1)}
+                        disabled={index === 0}
+                        aria-label="Move up"
+                        title="Move up"
+                      >
+                        ↑
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => moveTemplate(index, index + 1)}
+                        disabled={index === templateIds.length - 1}
+                        aria-label="Move down"
+                        title="Move down"
+                      >
+                        ↓
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => toggleTemplate(id)}
+                        aria-label="Remove"
+                        title="Remove"
+                      >
+                        ×
+                      </Button>
+                    </span>
+                  </li>
+                ))}
+              </ol>
+            )}
+
+            {templates.some((t) => !templateIds.includes(t.id)) ? (
+              <div className="mt-2.5 flex flex-wrap gap-1.5">
+                {templates
+                  .filter((t) => !templateIds.includes(t.id))
+                  .map((template) => (
+                    <Button
+                      key={template.id}
+                      type="button"
+                      size="sm"
+                      onClick={() => toggleTemplate(template.id)}
+                    >
+                      + {template.name}
+                    </Button>
+                  ))}
+              </div>
+            ) : null}
           </div>
         )}
       </fieldset>

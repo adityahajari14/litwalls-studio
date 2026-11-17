@@ -74,3 +74,17 @@ export const PRINT_JPEG = {
   chromaSubsampling: "4:4:4",
   mozjpeg: true,
 } as const;
+
+/**
+ * JPEG settings for a mockup, and for the room photo underneath it.
+ *
+ * The same as a print file, for the same reason one step removed: a mockup is
+ * a picture OF poster art, and it is the image a product is judged by — the
+ * thumbnail on every collection page. At the quality 88 and default 4:2:0
+ * these were written with, the poster inside a mockup came out 3.5dB further
+ * from the lossless composite and with twice the colour error along its
+ * edges, for a file a third smaller. The room photo is stored at this quality
+ * too, since every mockup re-encodes it and whatever it lost the first time
+ * is lost in all of them.
+ */
+export const MOCKUP_JPEG = PRINT_JPEG;

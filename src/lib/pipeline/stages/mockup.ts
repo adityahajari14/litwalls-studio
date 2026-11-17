@@ -2,6 +2,7 @@ import "server-only";
 
 import { assemblePanels, composeMockup } from "@/lib/image/compose";
 import { ensureDir, jobAsset, jobDir } from "@/lib/pipeline/paths";
+import { inSequence } from "@/lib/print/gallery";
 import { printOrientation } from "@/lib/print/orientation";
 import { sizeIdsFor } from "@/lib/print/sizes";
 import {
@@ -41,9 +42,12 @@ export async function renderMockups(job: PosterJob): Promise<RenderedMockup[]> {
   const borderMm = mockupBorder.enabled ? mockupBorder.mm : 0;
   if (templates.length === 0) return [];
 
+  // Rendered in the order they were chosen, not the library's: the order of
+  // `job.mockups` is the order of the published gallery, and its first entry
+  // is the product's thumbnail.
   const chosen =
     job.selectedTemplateIds.length > 0
-      ? templates.filter((t) => job.selectedTemplateIds.includes(t.id))
+      ? inSequence(templates, job.selectedTemplateIds)
       : pickAutomatic(templates, job);
 
   if (chosen.length === 0) return [];

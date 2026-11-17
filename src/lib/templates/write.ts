@@ -5,6 +5,7 @@ import { join } from "node:path";
 import sharp from "sharp";
 
 import { analyzeWallPlacement } from "@/lib/gemini/placement";
+import { MOCKUP_JPEG } from "@/lib/image/print-output";
 import { upscaleAssetInPlace } from "@/lib/image/upscale-asset";
 import { TEMPLATES_DIR, writeJsonAtomic } from "@/lib/pipeline/paths";
 import { loadTemplate } from "@/lib/templates/load";
@@ -103,7 +104,7 @@ export async function createTemplate(input: {
 
   await image
     .resize(width, height, { fit: "fill" })
-    .jpeg({ quality: 88 })
+    .jpeg(MOCKUP_JPEG)
     .toFile(join(dir, "background.jpg"));
 
   // A sensible starting placement — a centred portrait rect covering about
@@ -254,7 +255,7 @@ export async function replaceBackground(
 
   await image
     .resize(width, height, { fit: "fill" })
-    .jpeg({ quality: 88 })
+    .jpeg(MOCKUP_JPEG)
     .toFile(join(TEMPLATES_DIR, id, "background.jpg"));
 
   // A new photo means a new wall — upscale it and re-derive the placement,

@@ -3,6 +3,7 @@ import "server-only";
 import { join } from "node:path";
 import sharp, { type OverlayOptions } from "sharp";
 
+import { MOCKUP_JPEG } from "@/lib/image/print-output";
 import { warpPerspective } from "@/lib/image/warp";
 import { TEMPLATES_DIR } from "@/lib/pipeline/paths";
 import {
@@ -411,7 +412,7 @@ export async function composeMockup(
   await sharp(background)
     .resize(canvas.width, canvas.height, { fit: "cover" })
     .composite(layers)
-    .jpeg({ quality: 88 })
+    .jpeg(MOCKUP_JPEG)
     .toFile(outPath);
 
   return { width: canvas.width, height: canvas.height };

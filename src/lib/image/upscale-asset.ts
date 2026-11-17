@@ -3,6 +3,7 @@ import "server-only";
 import { rm } from "node:fs/promises";
 import sharp, { type Sharp } from "sharp";
 
+import { MOCKUP_JPEG } from "@/lib/image/print-output";
 import { aiUpscale4x } from "@/lib/pipeline/stages/ai-upscale";
 import { writeFileAtomic } from "@/lib/pipeline/paths";
 
@@ -90,7 +91,7 @@ export async function upscaleAssetInPlace(
     const encoded =
       options.encode === "jpeg"
         ? await pipeline
-            .jpeg({ quality: 88 })
+            .jpeg(MOCKUP_JPEG)
             .toBuffer({ resolveWithObject: true })
         : await reencodeAsSource(pipeline, meta.format);
 
