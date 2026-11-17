@@ -46,28 +46,49 @@ export async function withRetry<T>(
 export async function admin<T>(
   query: string,
   variables?: Record<string, unknown>,
+  options: {
+    /**
+     * False for a mutation that must not run twice, such as creating a
+     * product. It is then retried only when Shopify said it did NOT run it
+     * (throttled); a dropped connection or a 5xx may have come after Shopify
+     * committed, so it is reported instead of repeated.
+     */
+    idempotent?: boolean;
+  } = {},
 ): Promise<T> {
   const { endpoint, accessToken } = adminConfig();
+  const idempotent = options.idempotent !== false;
 
   return withRetry("Admin API request", async () => {
-    const response = await fetch(endpoint, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Shopify-Access-Token": accessToken,
-      },
-      body: JSON.stringify({ query, variables }),
-      // Every response here either creates something or carries a single-use
-      // expiring credential. Caching would be actively wrong.
-      cache: "no-store",
-    });
+    let response: Response;
+    try {
+      response = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Shopify-Access-Token": accessToken,
+        },
+        body: JSON.stringify({ query, variables }),
+        // Every response here either creates something or carries a single-use
+        // expiring credential. Caching would be actively wrong.
+        cache: "no-store",
+      });
+    } catch (cause) {
+      if (idempotent) throw cause; // transport failure: retried
+      throw new ShopifyError(
+        `Lost the connection to Shopify mid-request (${
+          cause instanceof Error ? cause.message : String(cause)
+        }). It may or may not have gone through.`,
+      );
+    }
 
     if (!response.ok) {
       throw new ShopifyError(
         `Admin API returned ${response.status} ${response.statusText}`,
         undefined,
-        // 429 is Shopify's throttle; 5xx is its problem rather than ours.
-        response.status === 429 || response.status >= 500,
+        // 429 is Shopify's throttle and means nothing ran; 5xx is its problem
+        // rather than ours, but may have come after the work was done.
+        response.status === 429 || (idempotent && response.status >= 500),
       );
     }
 

@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { Button } from "@/components/ui";
 
@@ -36,6 +36,42 @@ export function PublishButton({
   const [toDrive, setToDrive] = useState(true);
   const [result, setResult] = useState<string | null>(null);
   const [errors, setErrors] = useState<string[]>([]);
+  // A run the SERVER is doing for this batch — possibly started from another
+  // tab, or from this one before a reload. While it exists nothing here can
+  // start another: that is how one Music batch got published twice.
+  const [serverRun, setServerRun] = useState<{
+    mode: "publish" | "republish";
+    total: number;
+    done: number;
+    failed: number;
+    current: string | null;
+  } | null>(null);
+
+  const wasRunning = useRef(false);
+  const checkRun = useCallback(async () => {
+    try {
+      const response = await fetch(`/api/batches/${batchId}/publish`, {
+        cache: "no-store",
+      });
+      if (!response.ok) return;
+      const body = await response.json();
+      // It just finished somewhere else: show the new state of the batch.
+      if (wasRunning.current && !body.running) router.refresh();
+      wasRunning.current = Boolean(body.running);
+      setServerRun(body.running ?? null);
+    } catch {
+      // Transient; the next tick asks again.
+    }
+  }, [batchId, router]);
+
+  useEffect(() => {
+    const first = setTimeout(checkRun, 0);
+    const timer = setInterval(checkRun, serverRun || pending ? 3000 : 15000);
+    return () => {
+      clearTimeout(first);
+      clearInterval(timer);
+    };
+  }, [checkRun, serverRun, pending]);
 
   async function run(mode: "publish" | "republish") {
     if (
@@ -66,6 +102,7 @@ export function PublishButton({
 
       if (!response.ok) {
         setResult(body.error ?? "Publish failed.");
+        if (body.running) setServerRun(body.running);
         return;
       }
       if (body.message) {
@@ -81,7 +118,8 @@ export function PublishButton({
       if (body.failed) setResult((prev) => `${prev}, ${body.failed} failed`);
       if (body.driveQueued) {
         setResult(
-          (prev) => `${prev} · ${body.driveQueued} filing to Drive in the background`,
+          (prev) =>
+            `${prev} · ${body.driveQueued} filing to Drive in the background`,
         );
       }
       setErrors(
@@ -97,17 +135,28 @@ export function PublishButton({
     }
   }
 
-  const busy = pending !== null;
+  const busy = pending !== null || serverRun !== null;
+  const progress = serverRun
+    ? ` ${serverRun.done + serverRun.failed} of ${serverRun.total}`
+    : "";
+  const runMode = pending ?? serverRun?.mode ?? null;
 
   return (
     <div>
       <div className="flex flex-wrap items-center gap-2.5">
         {unpublished > 0 ? (
-          <Button variant="primary" onClick={() => run("publish")} disabled={busy}>
-            {pending === "publish" ? (
+          <Button
+            variant="primary"
+            onClick={() => run("publish")}
+            disabled={busy}
+          >
+            {runMode === "publish" ? (
               <>
-                <span aria-hidden className="breathe size-1.5 rounded-full bg-white" />
-                Publishing…
+                <span
+                  aria-hidden
+                  className="breathe size-1.5 rounded-full bg-white"
+                />
+                Publishing…{progress}
               </>
             ) : (
               "Publish to Shopify"
@@ -122,10 +171,13 @@ export function PublishButton({
             disabled={busy}
             title="Update the already-published products with the current images, title, description and prices"
           >
-            {pending === "republish" ? (
+            {runMode === "republish" ? (
               <>
-                <span aria-hidden className="breathe size-1.5 rounded-full bg-current" />
-                Republishing…
+                <span
+                  aria-hidden
+                  className="breathe size-1.5 rounded-full bg-current"
+                />
+                Republishing…{progress}
               </>
             ) : (
               `Republish ${published}`
@@ -159,8 +211,18 @@ export function PublishButton({
           File to Google Drive
         </label>
 
+        {serverRun && !pending ? (
+          <span className="text-xs text-ink-500">
+            Already running on the server
+            {serverRun.current ? ` — now on ${serverRun.current}` : ""}. It
+            carries on if you close this page.
+          </span>
+        ) : null}
+
         {result ? (
-          <span className="animate-fade-rise text-xs text-ink-600">{result}</span>
+          <span className="animate-fade-rise text-xs text-ink-600">
+            {result}
+          </span>
         ) : null}
       </div>
 
